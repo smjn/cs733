@@ -14,16 +14,19 @@ import (
 const (
 	//request
 	SET = "set"
-//	GET = "get"
-//	GETM = "getm"
-//	CAS = "cas"
-//	DELETE = "delete"
+	GET = "get"
+	GETM = "getm"
+	CAS = "cas"
+	DELETE = "delete"
 	NOREPLY = "[noreply]"
 //
 //	//response
 //	OK = "OK"
 //	VALUE = "VALUE"
 //	DELETED = "DELETED"
+
+	//errors
+	ERR_CMD_ERR = "ERR_CMD_ERR"
 )
 
 type Data struct {
@@ -62,44 +65,83 @@ func startServer() {
 	}
 }
 
-func read(conn *net.Conn) (msg string, success bool){
-	buf := make([]byte, 1024)
+func read(conn *net.Conn, toRead uint64) ([]byte, bool){
+	buf := make([]byte, toRead)
 	_, err := (*conn).Read(buf)
 
 	if err != nil {
 		if err == io.EOF {
 			fmt.Println("Client disconnected!")
-			return "", false
+			return []byte{0}, false
 		}
 	}
 
 	n := bytes.Index(buf, []byte{0})
 	if n != 0 {
-		msg := string(buf[:n-1])
-		fmt.Println("Received: ", msg)
-		return msg, true
+		fmt.Println("Received: ", string(buf[:n-1]))
+		return buf[:n-1], true
 	}
 
-	return "", false
+	return []byte{0}, false
 }
 
 func handleClient(conn *net.Conn, table *KeyValueStore) {
 	defer (*conn).Close()
 	for {
-		if msg, ok := read(conn); ok{
-			parseInput(&msg, table)
+		if msg, ok := read(conn, 1024); ok{
+			parseInput(conn, string(msg), table)
 		}
 	}
 }
 
-func parseInput(msg *string, table *KeyValueStore) {
-	tokens := strings.Fields(*msg)
-	fmt.Println(tokens)
+func isValid(cmd string, tokens []string, conn *net.Conn) int{
+	var flag int
+	switch cmd {
+		case SET:
+			if len(tokens) > 5 || len(tokens) < 4 {
+				flag = 1
+			}
+			//other validations
+		case GET:
+			if len(tokens) != 2 {
+				flag = 1
+			}
+			//other validations
+		case GETM:
+			if len(tokens) != 2 {
+				flag = 1
+			}
+			//other validations
+		case CAS:
+			if len(tokens) > 6 || len(tokens) < 5 {
+				flag = 1
+			}
+			//other validations
+		case DELETE:
+			if len(tokens) != 2 {
+				flag = 1
+			}
+			//other validations
+		default:
+			return 0
+	}
+	
+	switch flag {
+		case 1: (*conn).Write([]byte(ERR_CMD_ERR))
+	}
+
+	return flag
+}
+
+func parseInput(conn *net.Conn, msg string, table *KeyValueStore) {
+	tokens := strings.Fields(msg)
+	//fmt.Println(tokens)
 	switch tokens[0] {
 		case SET:
-			if v, ok := read(conn); ok{
-				performSet(tokens[1:len(tokens)], v, table)
+			if isValid(SET, tokens, conn) != 0 {
+				return
 			}
+			performSet(conn, tokens[1:len(tokens)], table)
 		//case GET: performGet(tokens[1:len(tokens)])
 		//case GETM: performGetm(tokens[1:len(tokens)])
 		//case CAS: performCas(tokens[1:len(tokens)])
@@ -108,7 +150,7 @@ func parseInput(msg *string, table *KeyValueStore) {
 	}
 }
 
-func performSet(tokens []string, val []byte, table *KeyValueStore){
+func performSet(conn *net.Conn, tokens []string, table *KeyValueStore){
 	k := tokens[0]
 	e, _ := strconv.ParseUint(tokens[1], 10, 64)
 	n, _ := strconv.ParseUint(tokens[2], 10, 64)
@@ -120,21 +162,28 @@ func performSet(tokens []string, val []byte, table *KeyValueStore){
 
 	fmt.Println(r)
 
-	//read value 
-	if v, ok := read(conn)
+	//read value
+	v, ok := read(conn, n+2) 
+	if !ok {
+		//error here
+		return
+	}
+
 	(*table).Lock()
 	//critical section start
-	if ele, ok := (*table).dictionary[k]; ok {
-		fmt.Println(ele)
+	var val *Data
+	if _, ok := (*table).dictionary[k]; ok {
+		val = (*table).dictionary[k]
 	} else{
-		ver++
-		val := new(Data)
-		(*val).numBytes = n
-		(*val).version = ver
-		(*val).expTime = e + uint64(time.Now().Unix())
-		(*val).value = []byte{0}
+		val = new(Data)
 		(*table).dictionary[k] = val
 	}
+	ver++
+	(*val).numBytes = n
+	(*val).version = ver
+	(*val).expTime = e + uint64(time.Now().Unix())
+	(*val).value = v
+
 	(*table).Unlock()
 	debug(table)
 }

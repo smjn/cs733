@@ -7,8 +7,17 @@ import (
 	"os"
 )
 
+func doRead(conn net.Conn) {
+	for {
+		buf := make([]byte, 1024)
+		conn.Read(buf)
+		fmt.Println(string(buf))
+	}
+}
+
 func main() {
 	conn, err := net.Dial("tcp", "localhost:5000")
+	go doRead(conn)
 
 	if err != nil {
 		fmt.Println("Err:", err)
