@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"encoding/gob"
 	"net"
+	"bytes"
 )
 
 func startServer() {
@@ -26,13 +26,17 @@ func startServer() {
 }
 
 func handleClient(conn net.Conn) {
-	//defer conn.Close()
-	var msg string
 	for {
-		err := gob.NewDecoder(conn).Decode(&msg)
+		buf := make([]byte, 1024)
+		_, err := conn.Read(buf)
+		
 		if err != nil {
-			//fmt.Println("Err: ", err)
-		} else {
+			fmt.Println("Err: ", err)
+		}
+
+		n := bytes.Index(buf, []byte{0})
+		if n != 0 {
+			msg := string(buf[:n-1])
 			fmt.Println("Received: ", msg)
 		}
 	}

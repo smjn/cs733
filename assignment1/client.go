@@ -1,35 +1,28 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
-	"bufio"
-	"encoding/gob"
 )
 
-func client() {
+func main() {
 	conn, err := net.Dial("tcp", "localhost:5000")
-	//defer conn.Close()
 
 	if err != nil {
 		fmt.Println("Err:", err)
-		return
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		msg, _ := reader.ReadString('\n')
-		fmt.Println(msg)
-		err = gob.NewEncoder(conn).Encode(msg)
+		msg, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println("Err:", err)
+			fmt.Println("Err: ", err)
 		}
+		fmt.Println(msg)
+		conn.Write([]byte(msg))
 	}
-}
 
-func main() {
-	go client()
-	var input string
-	fmt.Scanln(&input)
+	conn.Close()
 }
