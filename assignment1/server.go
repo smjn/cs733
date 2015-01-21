@@ -27,7 +27,7 @@ const (
 	OK    = "OK"
 	CRLF  = "\r\n"
 	VALUE = "VALUE"
-	//	DELETED = "DELETED"
+	DELETED = "DELETED"
 
 	//errors
 	ERR_CMD_ERR   = "ERR_CMD_ERR"
@@ -106,6 +106,9 @@ func handleClient(conn net.Conn, table *KeyValueStore) {
 	defer conn.Close()
 	for {
 		if msg, ok := read(conn, 1024); ok {
+			if len(msg) == 0{
+				continue
+			}
 			parseInput(conn, string(msg), table)
 		} else {
 			break
@@ -161,10 +164,35 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 		if len(tokens) > 6 || len(tokens) < 5 {
 			flag = 1
 		}
+		if len([]byte(tokens[1])) > 250 {
+			flag = 1
+			logger.Println(cmd, ":Invalid size of key")
+		}
+		if len(tokens) == 6 && tokens[5] != NOREPLY {
+			logger.Println(cmd, ":optional arg incorrect")
+			flag = 1
+		}
+		if _, err := strconv.ParseUint(tokens[2], 10, 64); err != nil {
+			logger.Println(cmd, ":expiry time invalid")
+			flag = 1
+		}
+		if _, err := strconv.ParseUint(tokens[3], 10, 64); err != nil {
+			logger.Println(cmd, ":version invalid")
+			flag = 1
+		}
+		if _, err := strconv.ParseUint(tokens[4], 10, 64); err != nil {
+			logger.Println(cmd, ":numbytes invalid")
+			flag = 1
+		}
+
 		//other validations
 	case DELETE:
 		if len(tokens) != 2 {
 			flag = 1
+		}
+		if len([]byte(tokens[1])) > 250 {
+			flag = 1
+			logger.Println(cmd, ":Invalid size of key")
 		}
 		//other validations
 	default:
@@ -272,7 +300,15 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore) {
 				}
 			}
 		}
-	//case DELETE: performDelete(tokens[1:len(tokens)])
+	case DELETE:
+		if isValid(DELETE, tokens, conn) != 0 {
+			return
+		}
+		if ok := performDelete(conn, tokens[1:len(tokens)], table); ok {
+			buffer.Reset()
+			buffer.WriteString(DELETED)
+			write(conn, buffer.String())
+		}
 	default:
 		logger.Println("Command not found")
 	}
@@ -400,6 +436,19 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, i
 		return 0, 2, r //version mismatch
 	}
 	return 0, 3, r //key not found
+}
+
+func performDelete(conn net.Conn, tokens []string, table *KeyValueStore) (bool) {
+	k := tokens[0]
+
+	defer table.Unlock()
+	table.Lock()
+	//begin critical section
+	if _, ok := table.dictionary[k]; ok {
+		delete(table.dictionary, k)
+		return true
+	}
+	return false
 }
 
 func debug(table *KeyValueStore) {
