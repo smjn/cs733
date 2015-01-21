@@ -9,6 +9,9 @@ import (
 	"sync"
 	"strconv"
 	"time"
+	"log"
+	"os"
+	"io/ioutil"
 )
 
 const (
@@ -18,15 +21,19 @@ const (
 	GETM = "getm"
 	CAS = "cas"
 	DELETE = "delete"
-	NOREPLY = "[noreply]"
+	NOREPLY = "noreply"
 //
 //	//response
-//	OK = "OK"
+	OK = "OK"
+	CRLF = "\r\n"
 //	VALUE = "VALUE"
 //	DELETED = "DELETED"
 
 	//errors
 	ERR_CMD_ERR = "ERR_CMD_ERR"
+
+	//logging
+	LOG = true 
 )
 
 type Data struct {
@@ -42,12 +49,13 @@ type KeyValueStore struct {
 }
 
 var ver uint64
+var logger *log.Logger
 
 func startServer() {
-	fmt.Println("Server started")
+	logger.Println("Server started")
 	listener, err := net.Listen("tcp", ":5000")
 	if err != nil {
-		fmt.Println("Could not start server!")
+		logger.Println("Could not start server!")
 	}
 
 	//initialize key value store
@@ -57,44 +65,52 @@ func startServer() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println(err)
+			logger.Println(err)
 			continue
 		}
 
-		go handleClient(&conn, table)
+		go handleClient(conn, table)
 	}
 }
 
-func read(conn *net.Conn, toRead uint64) ([]byte, bool){
+func read(conn net.Conn, toRead uint64) ([]byte, bool){
 	buf := make([]byte, toRead)
-	_, err := (*conn).Read(buf)
+	_, err := conn.Read(buf)
 
 	if err != nil {
 		if err == io.EOF {
-			fmt.Println("Client disconnected!")
+			logger.Println("Client disconnected!")
 			return []byte{0}, false
 		}
 	}
 
 	n := bytes.Index(buf, []byte{0})
 	if n != 0 {
-		fmt.Println("Received: ", string(buf[:n-1]))
-		return buf[:n-1], true
+		logger.Println("Received: ", buf[:n], string(buf[:n]))
+		return buf[:n-2], true
 	}
 
 	return []byte{0}, false
 }
 
-func handleClient(conn *net.Conn, table *KeyValueStore) {
-	defer (*conn).Close()
+func write(conn net.Conn, msg string) {
+	buf := []byte(msg)[0:len(msg)-1]
+	buf = append(buf, []byte(CRLF))
+	conn.Write(buf)
+}
+
+func handleClient(conn net.Conn, table *KeyValueStore) {
+	defer conn.Close()
 	for {
 		if msg, ok := read(conn, 1024); ok{
 			parseInput(conn, string(msg), table)
+		} else {
+			break
 		}
 	}
 }
 
-func isValid(cmd string, tokens []string, conn *net.Conn) int{
+func isValid(cmd string, tokens []string, conn net.Conn) int{
 	var flag int
 	switch cmd {
 		case SET:
@@ -127,30 +143,33 @@ func isValid(cmd string, tokens []string, conn *net.Conn) int{
 	}
 	
 	switch flag {
-		case 1: (*conn).Write([]byte(ERR_CMD_ERR))
+		case 1: write(conn, ERR_CMD_ERR)
 	}
 
 	return flag
 }
 
-func parseInput(conn *net.Conn, msg string, table *KeyValueStore) {
+func parseInput(conn net.Conn, msg string, table *KeyValueStore) {
 	tokens := strings.Fields(msg)
-	//fmt.Println(tokens)
+	var buffer bytes.Buffer
+	//logger.Println(tokens)
 	switch tokens[0] {
 		case SET:
 			if isValid(SET, tokens, conn) != 0 {
 				return
 			}
-			performSet(conn, tokens[1:len(tokens)], table)
+			if ver, ok := performSet(conn, tokens[1:len(tokens)], table); ok {
+				
+			}
 		//case GET: performGet(tokens[1:len(tokens)])
 		//case GETM: performGetm(tokens[1:len(tokens)])
 		//case CAS: performCas(tokens[1:len(tokens)])
 		//case DELETE: performDelete(tokens[1:len(tokens)])
-		default: fmt.Println("Command not found")
+		default: logger.Println("Command not found")
 	}
 }
 
-func performSet(conn *net.Conn, tokens []string, table *KeyValueStore){
+func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, bool){
 	k := tokens[0]
 	e, _ := strconv.ParseUint(tokens[1], 10, 64)
 	n, _ := strconv.ParseUint(tokens[2], 10, 64)
@@ -160,7 +179,7 @@ func performSet(conn *net.Conn, tokens []string, table *KeyValueStore){
 		r = false
 	}
 
-	fmt.Println(r)
+	logger.Println(r)
 
 	//read value
 	v, ok := read(conn, n+2) 
@@ -169,35 +188,47 @@ func performSet(conn *net.Conn, tokens []string, table *KeyValueStore){
 		return
 	}
 
-	(*table).Lock()
+	table.Lock()
+	logger.Println("Table locked")
 	//critical section start
 	var val *Data
-	if _, ok := (*table).dictionary[k]; ok {
-		val = (*table).dictionary[k]
+	if _, ok := table.dictionary[k]; ok {
+		val = table.dictionary[k]
 	} else{
 		val = new(Data)
-		(*table).dictionary[k] = val
+		table.dictionary[k] = val
 	}
 	ver++
-	(*val).numBytes = n
-	(*val).version = ver
-	(*val).expTime = e + uint64(time.Now().Unix())
-	(*val).value = v
+	val.numBytes = n
+	val.version = ver
+	val.expTime = e + uint64(time.Now().Unix())
+	val.value = v
 
-	(*table).Unlock()
+	table.Unlock()
+	logger.Println("Table unlocked")
 	debug(table)
+	return val.version, true
 }
 
 func debug(table *KeyValueStore){
-	fmt.Println("----start debug----")
+	logger.Println("----start debug----")
 	for key,val := range (*table).dictionary {
-		fmt.Println(key, val)
+		logger.Println(key, val)
 	}
-	fmt.Println("----end debug----")
+	logger.Println("----end debug----")
 }
 
 func main() {
 	ver = 1
+
+	if LOG {
+		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0666)
+		defer logf.Close()
+		logger = log.New(logf, "SERVER: ", log.Ltime|log.Lshortfile)
+	} else{
+		logger = log.New(ioutil.Discard, "SERVER: ", log.Ldate)
+	}
+
 	go startServer()
 	var input string
 	fmt.Scanln(&input)
