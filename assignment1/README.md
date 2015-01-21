@@ -10,3 +10,5 @@ completed:
 yet to complete:
 	-when sending commands from test case, read/write sync breaks
 	-test cases need to be made
+
+Note: inorder to run test cases you need to move the client.go file somewhere else

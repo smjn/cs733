@@ -24,9 +24,9 @@ const (
 	NOREPLY = "noreply"
 	//
 	//	//response
-	OK    = "OK"
-	CRLF  = "\r\n"
-	VALUE = "VALUE"
+	OK      = "OK"
+	CRLF    = "\r\n"
+	VALUE   = "VALUE"
 	DELETED = "DELETED"
 
 	//errors
@@ -106,7 +106,7 @@ func handleClient(conn net.Conn, table *KeyValueStore) {
 	defer conn.Close()
 	for {
 		if msg, ok := read(conn, 1024); ok {
-			if len(msg) == 0{
+			if len(msg) == 0 {
 				continue
 			}
 			parseInput(conn, string(msg), table)
@@ -404,7 +404,7 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, i
 	e, _ := strconv.ParseUint(tokens[1], 10, 64)
 	ve, _ := strconv.ParseUint(tokens[2], 10, 64)
 	n, _ := strconv.ParseUint(tokens[3], 10, 64)
-	r := true 
+	r := true
 
 	logger.Println(k, e, ve, n, r)
 	if len(tokens) == 5 && tokens[4] == NOREPLY {
@@ -438,7 +438,7 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, i
 	return 0, 3, r //key not found
 }
 
-func performDelete(conn net.Conn, tokens []string, table *KeyValueStore) (bool) {
+func performDelete(conn net.Conn, tokens []string, table *KeyValueStore) bool {
 	k := tokens[0]
 
 	defer table.Unlock()
