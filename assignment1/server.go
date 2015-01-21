@@ -31,6 +31,7 @@ const (
 
 	//errors
 	ERR_CMD_ERR = "ERR_CMD_ERR"
+	ERR_NOT_FOUND = "ERR_NOT_FOUND"
 
 	//logging
 	LOG = true
@@ -139,11 +140,20 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 	case GET:
 		if len(tokens) != 2 {
 			flag = 1
+			logger.Println(cmd, ":Invalid number of arguments")
+		}
+		if len(tokens[1]) > 250 {
+			flag = 1
+			logger.Println(cmd, ":Invalid key size")
 		}
 		//other validations
 	case GETM:
 		if len(tokens) != 2 {
 			flag = 1
+		}
+		if len(tokens[1]) > 250 {
+			flag = 1
+			logger.Println(cmd, ":Invalid key size")
 		}
 		//other validations
 	case CAS:
@@ -202,8 +212,36 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore) {
 			buffer.Reset()
 			buffer.Write(data.value)
 			write(conn, buffer.String())
+		} else {
+			buffer.Reset()
+			buffer.WriteString(ERR_NOT_FOUND)
+			write(conn, buffer.String())
 		}
-	//case GETM: performGetm(tokens[1:len(tokens)])
+
+	case GETM:
+		if isValid(GETM, tokens, conn) != 0 {
+			return
+		}
+		if data, ok := performGetm(conn, tokens[1:len(tokens)], table); ok {
+			logger.Println("sending", tokens[1], "metadata")
+			buffer.Reset()
+			buffer.WriteString(VALUE)
+			buffer.WriteString(" ")
+			buffer.WriteString(strconv.FormatUint(data.version, 10))
+			buffer.WriteString(" ")
+			buffer.WriteString(strconv.FormatUint(data.expTime - uint64(time.Now().Unix()), 10))
+			buffer.WriteString(" ")
+			buffer.WriteString(strconv.FormatUint(data.numBytes, 10))
+			write(conn, buffer.String())
+			buffer.Reset()
+			buffer.Write(data.value)
+			write(conn, buffer.String())
+		} else {
+			buffer.Reset()
+			buffer.WriteString(ERR_NOT_FOUND)
+			write(conn, buffer.String())
+		}
+
 	//case CAS: performCas(tokens[1:len(tokens)])
 	//case DELETE: performDelete(tokens[1:len(tokens)])
 	default:
@@ -243,7 +281,11 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, b
 	ver++
 	val.numBytes = n
 	val.version = ver
-	val.expTime = e + uint64(time.Now().Unix())
+	if e == 0 {
+	val.expTime = e
+	} else {
+		val.expTime = e + uint64(time.Now().Unix())
+	}
 	val.value = v
 
 	table.Unlock()
@@ -258,11 +300,33 @@ func performGet(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bo
 	table.RLock()
 	//critical section begin
 	if v, ok := table.dictionary[k]; ok {
+		if v.expTime != 0 && v.expTime < uint64(time.Now().Unix()) {
+
+			return nil, false
+		}
 		data := new(Data)
 		data.numBytes = v.numBytes
-		logger.Println("Value:", v.value)
 		data.value = v.value[:]
-		logger.Println("Value:", data.value)
+		return data, true
+	} else {
+		return nil, false
+	}
+}
+
+func performGetm(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bool) {
+	k := tokens[0]
+	defer table.RUnlock()
+	table.RLock()
+	//critical section begin
+	if v, ok := table.dictionary[k]; ok {
+		if v.expTime != 0 && v.expTime < uint64(time.Now().Unix()) {
+			return nil, false
+		}
+		data := new(Data)
+		data.version = v.version
+		data.expTime = v.expTime
+		data.numBytes = v.numBytes
+		data.value = v.value[:]
 		return data, true
 	} else {
 		return nil, false
