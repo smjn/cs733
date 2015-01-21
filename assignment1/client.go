@@ -7,16 +7,25 @@ import (
 	"os"
 )
 
+var die bool
+
 func doRead(conn net.Conn) {
 	for {
 		buf := make([]byte, 1024)
-		conn.Read(buf)
+		_, err := conn.Read(buf)
+		if err != nil {
+			fmt.Println("Server closed connection")
+			die = true
+			break
+		}
+
 		fmt.Println(string(buf))
 	}
 }
 
 func main() {
 	conn, err := net.Dial("tcp", "localhost:5000")
+	die = false
 	go doRead(conn)
 
 	if err != nil {
@@ -25,6 +34,9 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
+		if die {
+			break
+		}
 		msg, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("Err: ", err)

@@ -94,8 +94,9 @@ func read(conn net.Conn, toRead uint64) ([]byte, bool){
 }
 
 func write(conn net.Conn, msg string) {
-	buf := []byte(msg)[0:len(msg)-1]
-	buf = append(buf, []byte(CRLF))
+	buf := []byte(msg)
+	buf = append(buf, []byte(CRLF)...)
+	logger.Println(buf, len(buf))
 	conn.Write(buf)
 }
 
@@ -115,6 +116,23 @@ func isValid(cmd string, tokens []string, conn net.Conn) int{
 	switch cmd {
 		case SET:
 			if len(tokens) > 5 || len(tokens) < 4 {
+				flag = 1
+				logger.Println(cmd, ":Invalid no. of tokens")
+			}
+			if len([]byte(tokens[1])) > 250 {
+				flag = 1
+				logger.Println(cmd, ":Invalid size of key")
+			}
+			if len(tokens) == 5 && tokens[4] != NOREPLY {
+				logger.Println(cmd, ":optional arg incorrect")
+				flag = 1
+			}
+			if _, err := strconv.ParseUint(tokens[2], 10, 64); err != nil {
+				logger.Println(cmd, ":expiry time invalid")
+				flag = 1
+			}
+			if _, err := strconv.ParseUint(tokens[3], 10, 64); err != nil {
+				logger.Println(cmd, ":numBytes invalid")
 				flag = 1
 			}
 			//other validations
@@ -159,9 +177,14 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore) {
 				return
 			}
 			if ver, ok := performSet(conn, tokens[1:len(tokens)], table); ok {
-				
+				logger.Println(ver)
+				buffer.WriteString(OK)
+				buffer.WriteString(" ")
+				buffer.WriteString(strconv.FormatUint(ver, 10))
+				logger.Println(buffer.String())
+				write(conn, buffer.String())
 			}
-		//case GET: performGet(tokens[1:len(tokens)])
+		case GET: performGet(tokens[1:len(tokens)])
 		//case GETM: performGetm(tokens[1:len(tokens)])
 		//case CAS: performCas(tokens[1:len(tokens)])
 		//case DELETE: performDelete(tokens[1:len(tokens)])
@@ -185,7 +208,7 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, b
 	v, ok := read(conn, n+2) 
 	if !ok {
 		//error here
-		return
+		return 0, false
 	}
 
 	table.Lock()
