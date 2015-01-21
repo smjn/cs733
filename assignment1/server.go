@@ -4,43 +4,43 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
-	"strconv"
 	"time"
-	"log"
-	"os"
-	"io/ioutil"
 )
 
 const (
 	//request
-	SET = "set"
-	GET = "get"
-	GETM = "getm"
-	CAS = "cas"
-	DELETE = "delete"
+	SET     = "set"
+	GET     = "get"
+	GETM    = "getm"
+	CAS     = "cas"
+	DELETE  = "delete"
 	NOREPLY = "noreply"
-//
-//	//response
-	OK = "OK"
-	CRLF = "\r\n"
-//	VALUE = "VALUE"
-//	DELETED = "DELETED"
+	//
+	//	//response
+	OK    = "OK"
+	CRLF  = "\r\n"
+	VALUE = "VALUE"
+	//	DELETED = "DELETED"
 
 	//errors
 	ERR_CMD_ERR = "ERR_CMD_ERR"
 
 	//logging
-	LOG = true 
+	LOG = true
 )
 
 type Data struct {
 	numBytes uint64
-	version uint64
-	expTime uint64
-	value []byte
+	version  uint64
+	expTime  uint64
+	value    []byte
 }
 
 type KeyValueStore struct {
@@ -59,7 +59,7 @@ func startServer() {
 	}
 
 	//initialize key value store
-	table := &KeyValueStore{dictionary:make(map[string]*Data)}
+	table := &KeyValueStore{dictionary: make(map[string]*Data)}
 
 	//infinite loop
 	for {
@@ -73,7 +73,7 @@ func startServer() {
 	}
 }
 
-func read(conn net.Conn, toRead uint64) ([]byte, bool){
+func read(conn net.Conn, toRead uint64) ([]byte, bool) {
 	buf := make([]byte, toRead)
 	_, err := conn.Read(buf)
 
@@ -103,7 +103,7 @@ func write(conn net.Conn, msg string) {
 func handleClient(conn net.Conn, table *KeyValueStore) {
 	defer conn.Close()
 	for {
-		if msg, ok := read(conn, 1024); ok{
+		if msg, ok := read(conn, 1024); ok {
 			parseInput(conn, string(msg), table)
 		} else {
 			break
@@ -111,57 +111,58 @@ func handleClient(conn net.Conn, table *KeyValueStore) {
 	}
 }
 
-func isValid(cmd string, tokens []string, conn net.Conn) int{
+func isValid(cmd string, tokens []string, conn net.Conn) int {
 	var flag int
 	switch cmd {
-		case SET:
-			if len(tokens) > 5 || len(tokens) < 4 {
-				flag = 1
-				logger.Println(cmd, ":Invalid no. of tokens")
-			}
-			if len([]byte(tokens[1])) > 250 {
-				flag = 1
-				logger.Println(cmd, ":Invalid size of key")
-			}
-			if len(tokens) == 5 && tokens[4] != NOREPLY {
-				logger.Println(cmd, ":optional arg incorrect")
-				flag = 1
-			}
-			if _, err := strconv.ParseUint(tokens[2], 10, 64); err != nil {
-				logger.Println(cmd, ":expiry time invalid")
-				flag = 1
-			}
-			if _, err := strconv.ParseUint(tokens[3], 10, 64); err != nil {
-				logger.Println(cmd, ":numBytes invalid")
-				flag = 1
-			}
-			//other validations
-		case GET:
-			if len(tokens) != 2 {
-				flag = 1
-			}
-			//other validations
-		case GETM:
-			if len(tokens) != 2 {
-				flag = 1
-			}
-			//other validations
-		case CAS:
-			if len(tokens) > 6 || len(tokens) < 5 {
-				flag = 1
-			}
-			//other validations
-		case DELETE:
-			if len(tokens) != 2 {
-				flag = 1
-			}
-			//other validations
-		default:
-			return 0
+	case SET:
+		if len(tokens) > 5 || len(tokens) < 4 {
+			flag = 1
+			logger.Println(cmd, ":Invalid no. of tokens")
+		}
+		if len([]byte(tokens[1])) > 250 {
+			flag = 1
+			logger.Println(cmd, ":Invalid size of key")
+		}
+		if len(tokens) == 5 && tokens[4] != NOREPLY {
+			logger.Println(cmd, ":optional arg incorrect")
+			flag = 1
+		}
+		if _, err := strconv.ParseUint(tokens[2], 10, 64); err != nil {
+			logger.Println(cmd, ":expiry time invalid")
+			flag = 1
+		}
+		if _, err := strconv.ParseUint(tokens[3], 10, 64); err != nil {
+			logger.Println(cmd, ":numBytes invalid")
+			flag = 1
+		}
+		//other validations
+	case GET:
+		if len(tokens) != 2 {
+			flag = 1
+		}
+		//other validations
+	case GETM:
+		if len(tokens) != 2 {
+			flag = 1
+		}
+		//other validations
+	case CAS:
+		if len(tokens) > 6 || len(tokens) < 5 {
+			flag = 1
+		}
+		//other validations
+	case DELETE:
+		if len(tokens) != 2 {
+			flag = 1
+		}
+		//other validations
+	default:
+		return 0
 	}
-	
+
 	switch flag {
-		case 1: write(conn, ERR_CMD_ERR)
+	case 1:
+		write(conn, ERR_CMD_ERR)
 	}
 
 	return flag
@@ -172,32 +173,50 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore) {
 	var buffer bytes.Buffer
 	//logger.Println(tokens)
 	switch tokens[0] {
-		case SET:
-			if isValid(SET, tokens, conn) != 0 {
-				return
-			}
-			if ver, ok := performSet(conn, tokens[1:len(tokens)], table); ok {
-				logger.Println(ver)
+	case SET:
+		if isValid(SET, tokens, conn) != 0 {
+			return
+		}
+		if ver, ok, r := performSet(conn, tokens[1:len(tokens)], table); ok {
+			logger.Println(ver)
+			if r {
+				buffer.Reset()
 				buffer.WriteString(OK)
 				buffer.WriteString(" ")
 				buffer.WriteString(strconv.FormatUint(ver, 10))
 				logger.Println(buffer.String())
 				write(conn, buffer.String())
 			}
-		case GET: performGet(tokens[1:len(tokens)])
-		//case GETM: performGetm(tokens[1:len(tokens)])
-		//case CAS: performCas(tokens[1:len(tokens)])
-		//case DELETE: performDelete(tokens[1:len(tokens)])
-		default: logger.Println("Command not found")
+		}
+	case GET:
+		if isValid(GET, tokens, conn) != 0 {
+			return
+		}
+		if data, ok := performGet(conn, tokens[1:len(tokens)], table); ok {
+			logger.Println("sending", tokens[1], "data")
+			buffer.Reset()
+			buffer.WriteString(VALUE)
+			buffer.WriteString(" ")
+			buffer.WriteString(strconv.FormatUint(data.numBytes, 10))
+			write(conn, buffer.String())
+			buffer.Reset()
+			buffer.Write(data.value)
+			write(conn, buffer.String())
+		}
+	//case GETM: performGetm(tokens[1:len(tokens)])
+	//case CAS: performCas(tokens[1:len(tokens)])
+	//case DELETE: performDelete(tokens[1:len(tokens)])
+	default:
+		logger.Println("Command not found")
 	}
 }
 
-func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, bool){
+func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, bool, bool) {
 	k := tokens[0]
 	e, _ := strconv.ParseUint(tokens[1], 10, 64)
 	n, _ := strconv.ParseUint(tokens[2], 10, 64)
 	r := true
-	
+
 	if len(tokens) == 4 && tokens[3] == NOREPLY {
 		r = false
 	}
@@ -205,10 +224,10 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, b
 	logger.Println(r)
 
 	//read value
-	v, ok := read(conn, n+2) 
+	v, ok := read(conn, n+2)
 	if !ok {
 		//error here
-		return 0, false
+		return 0, false, false
 	}
 
 	table.Lock()
@@ -217,7 +236,7 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, b
 	var val *Data
 	if _, ok := table.dictionary[k]; ok {
 		val = table.dictionary[k]
-	} else{
+	} else {
 		val = new(Data)
 		table.dictionary[k] = val
 	}
@@ -230,12 +249,29 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore) (uint64, b
 	table.Unlock()
 	logger.Println("Table unlocked")
 	debug(table)
-	return val.version, true
+	return val.version, true, r
 }
 
-func debug(table *KeyValueStore){
+func performGet(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bool) {
+	k := tokens[0]
+	defer table.RUnlock()
+	table.RLock()
+	//critical section begin
+	if v, ok := table.dictionary[k]; ok {
+		data := new(Data)
+		data.numBytes = v.numBytes
+		logger.Println("Value:", v.value)
+		data.value = v.value[:]
+		logger.Println("Value:", data.value)
+		return data, true
+	} else {
+		return nil, false
+	}
+}
+
+func debug(table *KeyValueStore) {
 	logger.Println("----start debug----")
-	for key,val := range (*table).dictionary {
+	for key, val := range (*table).dictionary {
 		logger.Println(key, val)
 	}
 	logger.Println("----end debug----")
@@ -245,10 +281,10 @@ func main() {
 	ver = 1
 
 	if LOG {
-		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0666)
+		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		defer logf.Close()
 		logger = log.New(logf, "SERVER: ", log.Ltime|log.Lshortfile)
-	} else{
+	} else {
 		logger = log.New(ioutil.Discard, "SERVER: ", log.Ldate)
 	}
 

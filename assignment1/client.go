@@ -42,7 +42,7 @@ func main() {
 			fmt.Println("Err: ", err)
 		}
 		fmt.Println(msg)
-		buf := []byte(msg)[0:len(msg)-1]
+		buf := []byte(msg)[0 : len(msg)-1]
 		buf = append(buf, []byte("\r\n")...)
 		fmt.Println(len(buf))
 		conn.Write(buf)
