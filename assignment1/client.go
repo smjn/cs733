@@ -23,7 +23,7 @@ func doRead(conn net.Conn) {
 	}
 }
 
-func main() {
+func tempmain() {
 	conn, err := net.Dial("tcp", "localhost:5000")
 	die = false
 	go doRead(conn)
@@ -33,6 +33,7 @@ func main() {
 	}
 
 	reader := bufio.NewReader(os.Stdin)
+
 	for {
 		if die {
 			break
