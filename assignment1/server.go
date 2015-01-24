@@ -14,6 +14,7 @@ import (
 	"time"
 )
 
+/*Constants used throughout the program to identify commands, request, response, and error messages*/
 const (
 	//request
 	SET     = "set"
@@ -36,21 +37,30 @@ const (
 	ERR_INTERNAL  = "ERR_INTERNAL"
 )
 
+//represents the value in the main hashtable (key, value) pair
 type Data struct {
-	numBytes uint64
-	version  uint64
-	expTime  uint64
-	value    []byte
+	numBytes uint64 //number of bytes of the value bytes
+	version  uint64 //current version of the key
+	expTime  uint64 //time offset in seconds after which the key should expire
+	value    []byte //bytes representing the actual content of the value
 }
 
+//represents the main hashtable where the dance actually happens
 type KeyValueStore struct {
-	dictionary map[string]*Data
-	sync.RWMutex
+	dictionary   map[string]*Data //the hashtable that stores the (key, value) pairs
+	sync.RWMutex                  //mutex for synchronization when reading or writing to the hashtable
 }
 
+//global version counter
 var ver uint64
+
+//pointer to custom logger
 var logger *log.Logger
 
+/*Function to start the server and accept connections.
+ *arguments: none
+ *return: none
+ */
 func startServer() {
 	logger.Println("Server started")
 	listener, err := net.Listen("tcp", ":5000")
@@ -69,10 +79,14 @@ func startServer() {
 			continue
 		}
 
-		go handleClient(conn, table)
+		go handleClient(conn, table) //client connection handler
 	}
 }
 
+/*Function to read data from the connection and put it on the channel so it could be read in a systematic fashion.
+ *arguments: channel shared between this go routine and other functions performing actions based on the commands given, client connection
+ *return: none
+ */
 func myRead(ch chan string, conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	for {
@@ -86,6 +100,10 @@ func myRead(ch chan string, conn net.Conn) {
 	}
 }
 
+/*Simple write function to send information to the client
+ *arguments: client connection, msg to send to the client
+ *return: none
+ */
 func write(conn net.Conn, msg string) {
 	buf := []byte(msg)
 	buf = append(buf, []byte(CRLF)...)
@@ -93,6 +111,10 @@ func write(conn net.Conn, msg string) {
 	conn.Write(buf)
 }
 
+/*After initial establishment of the connection with the client, this go routine handles further interaction
+ *arguments: client connection, pointer to the hastable structure
+ *return: none
+ */
 func handleClient(conn net.Conn, table *KeyValueStore) {
 	defer conn.Close()
 	//channel for every connection for every client
@@ -109,6 +131,10 @@ func handleClient(conn net.Conn, table *KeyValueStore) {
 	}
 }
 
+/*Basic validations for various commands
+ *arguments: command to check against, other parmameters sent with the command (excluding the value), client connection
+ *return: integer representing error state
+ */
 func isValid(cmd string, tokens []string, conn net.Conn) int {
 	var flag int
 	switch cmd {
@@ -133,7 +159,7 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 			logger.Println(cmd, ":numBytes invalid")
 			flag = 1
 		}
-		//other validations
+
 	case GET:
 		if len(tokens) != 2 {
 			flag = 1
@@ -143,7 +169,7 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 			flag = 1
 			logger.Println(cmd, ":Invalid key size")
 		}
-		//other validations
+
 	case GETM:
 		if len(tokens) != 2 {
 			flag = 1
@@ -152,7 +178,7 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 			flag = 1
 			logger.Println(cmd, ":Invalid key size")
 		}
-		//other validations
+
 	case CAS:
 		if len(tokens) > 6 || len(tokens) < 5 {
 			flag = 1
@@ -178,7 +204,6 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 			flag = 1
 		}
 
-		//other validations
 	case DELETE:
 		if len(tokens) != 2 {
 			flag = 1
@@ -187,7 +212,7 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 			flag = 1
 			logger.Println(cmd, ":Invalid size of key")
 		}
-		//other validations
+
 	default:
 		return 0
 	}
@@ -200,15 +225,20 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 	return flag
 }
 
+/*Function parses the command provided by the client and delegates further action to command specific functions.
+ *Based on the return values of those functions, send appropriate messages to the client.
+ *arguments: client connection, message from client, pointer to hashtable structure, channel shared with myRead function
+ *return: none
+ */
 func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan string) {
 	tokens := strings.Fields(msg)
-	//general error, don't check for commands, avoid the pain
+	//general error, don't check for commands, avoid the pain ;)
 	if len(tokens) > 6 {
 		write(conn, ERR_CMD_ERR)
 		return
 	}
 
-	var buffer bytes.Buffer
+	var buffer bytes.Buffer //for efficient string concatenation
 	//logger.Println(tokens)
 	switch tokens[0] {
 	case SET:
@@ -366,6 +396,10 @@ func readValue(ch chan string, n uint64) ([]byte, bool) {
 	return []byte(v), err
 }
 
+/*Delegate function responsible for all parsing and hashtable interactions for the SET command sent by client
+ *arguments: client connection, tokenized command sent by the client, pointer to hashtable structure, channel shared with myRead
+ *return: version of inserted key (if successful, 0 otherwise), success or failure, whether to send reply to client
+ */
 func performSet(conn net.Conn, tokens []string, table *KeyValueStore, ch chan string) (uint64, bool, bool) {
 	k := tokens[0]
 	e, _ := strconv.ParseUint(tokens[1], 10, 64) //expiry time offset
@@ -405,6 +439,10 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore, ch chan st
 	}
 }
 
+/*Delegate function reponsible for activities related to the GET command sent by the client.
+ *arguments: client connection, tokenized command sent by the client, pointer to hashtable structure
+ *return: pointer to value corresponding to the key given by client, success or failure
+ */
 func performGet(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bool) {
 	k := tokens[0]
 	defer table.RUnlock()
@@ -424,6 +462,10 @@ func performGet(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bo
 	}
 }
 
+/*Delegate function reponsible for activities related to the GETM command sent by the client.
+ *arguments: client connection, tokenized command sent by the client, pointer to hashtable structure
+ *return: pointer to value corresponding to the key given by client, success or failure
+ */
 func performGetm(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bool) {
 	k := tokens[0]
 	defer table.RUnlock()
@@ -445,6 +487,11 @@ func performGetm(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, b
 	}
 }
 
+/*Delegate function reponsible for activities related to the CAS command sent by the client.
+ *arguments: client connection, tokenized command sent by the client, pointer to hashtable structure, channel shared with myRead
+ *return: new version of updated key (if it is updated), error status {0: error while reading new value, 1: key found and changed,
+ *2: version mismatch with key, 3: key not found}, whether to reply to client
+ */
 func performCas(conn net.Conn, tokens []string, table *KeyValueStore, ch chan string) (uint64, int, bool) {
 	k := tokens[0]
 	e, _ := strconv.ParseUint(tokens[1], 10, 64)
@@ -465,7 +512,7 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore, ch chan st
 		table.Lock()
 		if val, ok := table.dictionary[k]; ok {
 			if val.version == ve {
-				if e == 0 {
+				if e == 0 { //if expiry time is zero, key should not be deleted
 					val.expTime = e
 				} else {
 					val.expTime = e + uint64(time.Now().Unix())
@@ -482,6 +529,10 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore, ch chan st
 	}
 }
 
+/*Delegate function reponsible for activities related to the DELETE command sent by the client.
+ *arguments: client connection, tokenized command sent by the client, pointer to hashtable structure
+ *return: integer secifying error state {0: found and deleted, 1: found but expired (deleted but client told non-existent, 2: key not found}
+ */
 func performDelete(conn net.Conn, tokens []string, table *KeyValueStore) int {
 	k := tokens[0]
 	logger.Println(tokens)
@@ -501,6 +552,10 @@ func performDelete(conn net.Conn, tokens []string, table *KeyValueStore) int {
 	return 2 //key not found
 }
 
+/*Simple function that dumps the contents of the hashtable
+ *arguments: pointer to the hashtable structure
+ *return: none
+ */
 func debug(table *KeyValueStore) {
 	logger.Println("----start debug----")
 	for key, val := range (*table).dictionary {
@@ -509,6 +564,10 @@ func debug(table *KeyValueStore) {
 	logger.Println("----end debug----")
 }
 
+/*Entry point of this program. Initializes the start of ther server and sets up the logger.
+ *arguments: none
+ *return: none
+ */
 func main() {
 	ver = 1
 
