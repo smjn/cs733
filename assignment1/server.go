@@ -23,7 +23,7 @@ const (
 	CAS     = "cas"
 	DELETE  = "delete"
 	NOREPLY = "noreply"
-	//
+
 	//	//response
 	OK      = "OK"
 	CRLF    = "\r\n"
@@ -39,10 +39,11 @@ const (
 
 //represents the value in the main hashtable (key, value) pair
 type Data struct {
-	numBytes uint64 //number of bytes of the value bytes
-	version  uint64 //current version of the key
-	expTime  uint64 //time offset in seconds after which the key should expire
-	value    []byte //bytes representing the actual content of the value
+	numBytes    uint64 //number of bytes of the value bytes
+	version     uint64 //current version of the key
+	expTime     uint64 //time offset in seconds after which the key should expire
+	value       []byte //bytes representing the actual content of the value
+	isPerpetual bool   //specifies that the key does not expire
 }
 
 //represents the main hashtable where the dance actually happens
@@ -289,7 +290,11 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan string)
 			buffer.WriteString(" ")
 			buffer.WriteString(strconv.FormatUint(data.version, 10))
 			buffer.WriteString(" ")
-			buffer.WriteString(strconv.FormatUint(data.expTime-uint64(time.Now().Unix()), 10))
+			if data.isPerpetual {
+				buffer.WriteString("0")
+			} else {
+				buffer.WriteString(strconv.FormatUint(data.expTime-uint64(time.Now().Unix()), 10))
+			}
 			buffer.WriteString(" ")
 			buffer.WriteString(strconv.FormatUint(data.numBytes, 10))
 			write(conn, buffer.String())
@@ -430,8 +435,10 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore, ch chan st
 		val.numBytes = n
 		val.version = ver
 		if e == 0 {
-			val.expTime = e
+			val.isPerpetual = true
+			val.expTime = 0
 		} else {
+			val.isPerpetual = false
 			val.expTime = e + uint64(time.Now().Unix())
 		}
 		val.value = v
@@ -449,8 +456,7 @@ func performGet(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, bo
 	table.RLock()
 	//critical section begin
 	if v, ok := table.dictionary[k]; ok {
-		if v.expTime != 0 && v.expTime < uint64(time.Now().Unix()) {
-			table.RUnlock()
+		if !v.isPerpetual && v.expTime < uint64(time.Now().Unix()) {
 			return nil, false
 		}
 		data := new(Data)
@@ -472,7 +478,7 @@ func performGetm(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, b
 	table.RLock()
 	//critical section begin
 	if v, ok := table.dictionary[k]; ok {
-		if v.expTime != 0 && v.expTime < uint64(time.Now().Unix()) {
+		if !v.isPerpetual && v.expTime < uint64(time.Now().Unix()) {
 			return nil, false
 		}
 		data := new(Data)
@@ -512,16 +518,25 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore, ch chan st
 		table.Lock()
 		if val, ok := table.dictionary[k]; ok {
 			if val.version == ve {
-				if e == 0 { //if expiry time is zero, key should not be deleted
-					val.expTime = e
+				if val.isPerpetual || val.expTime >= uint64(time.Now().Unix()) {
+					if e == 0 { //if expiry time is zero, key should not be deleted
+						val.isPerpetual = true
+						val.expTime = 0
+					} else {
+						val.isPerpetual = false
+						val.expTime = e + uint64(time.Now().Unix())
+					}
+					val.numBytes = n
+					ver++
+					val.version = ver
+					val.value = v
+					return val.version, 0, r //key found and changed
 				} else {
-					val.expTime = e + uint64(time.Now().Unix())
+					logger.Println("expired key found!")
+					//version found but key expired, can delete key safely and tell client that it does not exist
+					delete(table.dictionary, k)
+					return 0, 3, r
 				}
-				val.numBytes = n
-				ver++
-				val.version = ver
-				val.value = v
-				return val.version, 0, r //key found and changed
 			}
 			return 0, 2, r //version mismatch
 		}
@@ -541,9 +556,7 @@ func performDelete(conn net.Conn, tokens []string, table *KeyValueStore) int {
 	table.Lock()
 	//begin critical section
 	if v, ok := table.dictionary[k]; ok {
-		if v.expTime < uint64(time.Now().Unix()) {
-			flag = 1 //found but expired
-		} else {
+		if v.isPerpetual || v.expTime >= uint64(time.Now().Unix()) {
 			flag = 0 //found not expired
 		}
 		delete(table.dictionary, k) //delete anyway as expired or needs to be deleted
