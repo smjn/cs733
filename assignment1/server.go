@@ -38,6 +38,7 @@ const (
 
 	//constant
 	MAX_CMD_ARGS = 6
+	MIN_CMD_ARGS = 2
 	READ_TIMEOUT = 5
 )
 
@@ -142,93 +143,107 @@ func handleClient(conn net.Conn, table *KeyValueStore) {
  *return: integer representing error state
  */
 func isValid(cmd string, tokens []string, conn net.Conn) int {
-	var flag int
 	switch cmd {
 	case SET:
 		if len(tokens) > 5 || len(tokens) < 4 {
-			flag = 1
 			logger.Println(cmd, ":Invalid no. of tokens")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len([]byte(tokens[1])) > 250 {
-			flag = 1
 			logger.Println(cmd, ":Invalid size of key")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len(tokens) == 5 && tokens[4] != NOREPLY {
 			logger.Println(cmd, ":optional arg incorrect")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if _, err := strconv.ParseUint(tokens[2], 10, 64); err != nil {
 			logger.Println(cmd, ":expiry time invalid")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if _, err := strconv.ParseUint(tokens[3], 10, 64); err != nil {
 			logger.Println(cmd, ":numBytes invalid")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 
 	case GET:
 		if len(tokens) != 2 {
-			flag = 1
 			logger.Println(cmd, ":Invalid number of arguments")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len(tokens[1]) > 250 {
-			flag = 1
 			logger.Println(cmd, ":Invalid key size")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 
 	case GETM:
 		if len(tokens) != 2 {
-			flag = 1
+			logger.Println(cmd, ":Invalid number of tokens")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len(tokens[1]) > 250 {
-			flag = 1
 			logger.Println(cmd, ":Invalid key size")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 
 	case CAS:
 		if len(tokens) > 6 || len(tokens) < 5 {
-			flag = 1
+			logger.Println(cmd, ":Invalid number of tokens")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len([]byte(tokens[1])) > 250 {
-			flag = 1
 			logger.Println(cmd, ":Invalid size of key")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len(tokens) == 6 && tokens[5] != NOREPLY {
 			logger.Println(cmd, ":optional arg incorrect")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if _, err := strconv.ParseUint(tokens[2], 10, 64); err != nil {
 			logger.Println(cmd, ":expiry time invalid")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if _, err := strconv.ParseUint(tokens[3], 10, 64); err != nil {
 			logger.Println(cmd, ":version invalid")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if _, err := strconv.ParseUint(tokens[4], 10, 64); err != nil {
 			logger.Println(cmd, ":numbytes invalid")
-			flag = 1
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 
 	case DELETE:
 		if len(tokens) != 2 {
-			flag = 1
+			logger.Println(cmd, ":Invalid number of tokens")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 		if len([]byte(tokens[1])) > 250 {
-			flag = 1
 			logger.Println(cmd, ":Invalid size of key")
+			write(conn, ERR_CMD_ERR)
+			return 1
 		}
 
 	default:
 		return 0
 	}
-
-	switch flag {
-	case 1:
-		write(conn, ERR_CMD_ERR)
-	}
-
-	return flag
+	//compiler is happy
+	return 0
 }
 
 /*Function parses the command provided by the client and delegates further action to command specific functions.
@@ -239,7 +254,7 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte) {
 	tokens := strings.Fields(msg)
 	//general error, don't check for commands, avoid the pain ;)
-	if len(tokens) > MAX_CMD_ARGS {
+	if len(tokens) > MAX_CMD_ARGS || len(tokens) < MIN_CMD_ARGS {
 		write(conn, ERR_CMD_ERR)
 		return
 	}
@@ -385,6 +400,10 @@ func readValue(ch chan []byte, n uint64) ([]byte, bool) {
 		case temp := <-ch:
 			logger.Println("Value chunk read!")
 			valReadLength += uint64(len(temp))
+			if valReadLength > n+2 {
+				err = true
+				break
+			}
 			v = append(v, temp...)
 
 		case <-up:
@@ -424,7 +443,7 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore, ch chan []
 	logger.Println(r)
 
 	if v, err := readValue(ch, n); err {
-		write(conn, ERR_INTERNAL)
+		write(conn, ERR_CMD_ERR)
 		return 0, false, r
 	} else {
 		defer table.Unlock()
@@ -609,7 +628,7 @@ func CustomSplitter(data []byte, atEOF bool) (advance int, token []byte, err err
 			//here we add omega as we are using the complete data array instead of the slice where we found '\n'
 			if data[omega+i-1] == '\r' {
 				//next byte begins at i+1 and data[0:i+1] returned
-				return i + 1, data[0 : i+1], nil
+				return omega + i + 1, data[:omega+i+1], nil
 			} else {
 				//move the omega index to the byte after \n
 				omega = i + 1
@@ -639,8 +658,9 @@ func main() {
 		toLog = os.Args[1]
 	}
 
+	//toLog = "s"
 	if toLog != "" {
-		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		defer logf.Close()
 		logger = log.New(logf, "SERVER: ", log.Ltime|log.Lshortfile)
 	} else {

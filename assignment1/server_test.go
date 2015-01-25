@@ -2,63 +2,60 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 )
 
-func TestSet(t *testing.T) {
-	go main()
-	conn, err := net.Dial("tcp", "localhost:5000")
-	if err != nil {
-		t.Errorf("Error connecting to server")
-	} else {
-		time.Sleep(time.Second*2)
-		conn.Write([]byte("set xyz 200 10\r\n"))
-		time.Sleep(time.Millisecond)
-		conn.Write([]byte("abcd\r\n"))
-		buffer := make([]byte, 1024)
-		conn.Read(buffer)
-		msg := string(buffer)
-		if msg == ERR_CMD_ERR+"\r\n" {
-			t.Errorf("Expected OK <version>")
-		}
-	}
+type TestCasePair struct {
+	command  []byte
+	expected []byte
 }
 
-func TestGet(t *testing.T) {
-	//go main()
-	conn, err := net.Dial("tcp", "localhost:5000")
+//this test function will start tests for various commands, one client at a time
+func TestSerial(t *testing.T) {
+	go main()
+	//give some time for server to initialize
+	time.Sleep(time.Second)
+	testSetCommand(t)
+}
+
+func testSetCommand(t *testing.T) {
+	testSetReplyExpected(t)
+}
+
+func testSetReplyExpected(t *testing.T) {
+	conn, err := net.Dial("tcp", ":5000")
+	defer conn.Close()
+	time.Sleep(time.Millisecond)
 	if err != nil {
-		t.Errorf("Error connecting to server")
-	} else {
-		time.Sleep(time.Second)
-		conn.Write([]byte("set xyz 200 10\r\n"))
-		time.Sleep(time.Millisecond)
-		conn.Write([]byte("abcdefg\r\n"))
-		buffer := make([]byte, 1024)
-		conn.Read(buffer)
-		msg := string(buffer)
-		if msg == ERR_CMD_ERR+"\r\n" {
-			t.Errorf("Expected OK <version>")
-		}
+		t.Errorf("Connection Error")
+	}
 
-		conn.Write([]byte("get xyz\r\n"))
-		time.Sleep(time.Millisecond)
-		conn.Read(buffer)
-		msg = string(buffer)
-		if msg == ERR_CMD_ERR+"\r\n" {
-			t.Errorf("Expected key value")
-		}
+	cases := []TestCasePair{
+		{[]byte("set a 200 10\r\n1234567890\r\n"), []byte("OK 2\r\n")},                        //single length
+		{[]byte("set b 200 10\r\n12345\r\n890\r\n"), []byte("OK 3\r\n")},                      //\r\n in middle
+		{[]byte("set c 0 10\r\n12345\r\n890\r\n"), []byte("OK 4\r\n")},                        //perpetual key
+		{[]byte("set \n 200 10\r\n1234567890\r\n"), []byte("ERR_CMD_ERR\r\nERR_CMD_ERR\r\n")}, //newline key (error)
+		{[]byte("set d 200 10\r\n12345678901\r\n"), []byte("ERR_CMD_ERR\r\n")},                //value length greater (error)
+		{[]byte("set e 200 10\r\n1234\r6789\r\n"), []byte("ERR_CMD_ERR\r\n")},                 //value length less (error)
+		//key length high (250 bytes)
+		{[]byte("set 1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890 200 10\r\n1234\r67890\r\n"), []byte("OK 5\r\n")},
+		//key length high (251 bytes), error
+		{[]byte("set 12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901 200 10\r\n1234\r67890\r\n"), []byte("ERR_CMD_ERR\r\nERR_CMD_ERR\r\n")},
+		{[]byte("set f -1 10\r\n1234\r6\r89\r\n"), []byte("ERR_CMD_ERR\r\nERR_CMD_ERR\r\n")}, //invalid expiry
+		{[]byte("set f 200 0\r\n1234\r6\r89\r\n"), []byte("ERR_CMD_ERR\r\nERR_CMD_ERR\r\n")}, //invalid value size
+	}
 
-		conn.Write([]byte("get tuv\r\n"))
-		time.Sleep(time.Millisecond)
-		buffer = make([]byte, 1024)
-		conn.Read(buffer)
-		n := bytes.Index(buffer, []byte{0})
-		msg = string(buffer[:n])
-		if msg != ERR_NOT_FOUND+"\r\n" {
-			t.Errorf("Expected key value")
+	for i, e := range cases {
+		buf := make([]byte, 2048)
+		conn.Write(e.command)
+		n, _ := conn.Read(buf)
+		if !bytes.Equal(buf[:n], e.expected) {
+			fmt.Println(buf[:n], e.expected, string(buf[:n]), string(e.expected))
+			t.Errorf("Error occured for case:" + strconv.Itoa(i))
 		}
 	}
 }
