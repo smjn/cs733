@@ -22,3 +22,5 @@ In this project we have implemented the following commands:
 * delete - Deletes a key from the server, error if key is expired or not found.
 
 All functions use locking mechanisms to provide concurrency. For performance reasons, if a user asks for a key and it is expired, the user is notified as not found and the key is deleted.
+
+Note: Time taken to run all tesk cases 97.555 sec (150 concurrent clients sending 250 commands each)

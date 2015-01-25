@@ -14,16 +14,18 @@ type TestCasePair struct {
 	expected []byte
 }
 
+const MAX_CLIENTS = 150
+const MAX_CMD_NUM = 250
+
 //this test function will start tests for various commands, one client at a time
-func TestSerial(t *testing.T) {
+func TestCommands(t *testing.T) {
 	go main()
 	//give some time for server to initialize
 	time.Sleep(time.Second)
 	testIndividualCommands(t)
 	testRapidCommands(t)
 	ReInitServer()
-	//testMaxClients(t)
-	//testConcurrentCommands(t)
+	testConcurrentCommands(t)
 }
 
 func testIndividualCommands(t *testing.T) {
@@ -218,17 +220,146 @@ func testRapidCommands(t *testing.T) {
 	}
 }
 
-func testMaxClients(t *testing.T) {
-	//conn, err := net.Dial("localhost", ":5000")
-	table := make(map[int]*net.Conn)
-	i := 0
-	for i < 1000 {
+func testConcurrentCommands(t *testing.T) {
+	testConcurrentSet(t)
+	testConcurrentGet(t)
+	testConcurrentGetm(t)
+	testConcurrentCas(t)
+	testConcurrentDelete(t)
+}
+
+func testConcurrentSet(t *testing.T) {
+	ch := make(chan int)
+	for i := 0; i < MAX_CLIENTS; i++ {
 		conn, err := net.Dial("tcp", ":5000")
+		defer conn.Close()
 		if err != nil {
-			t.Errorf("error", err.Error())
+			t.Errorf("too many clients")
 		}
-		table[i] = &conn
-		i++
-		//fmt.Println(len(table))
+		go runSet(t, conn, i, ch)
 	}
+	num := 0
+	for num < MAX_CLIENTS {
+		num += <-ch
+		//fmt.Println(num)
+	}
+}
+
+func testConcurrentGet(t *testing.T) {
+	ch := make(chan int)
+	for i := 0; i < MAX_CLIENTS; i++ {
+		conn, err := net.Dial("tcp", ":5000")
+		defer conn.Close()
+		if err != nil {
+			t.Errorf("too many clients")
+		}
+		go runGet(t, conn, i, ch)
+	}
+	num := 0
+	for num < MAX_CLIENTS {
+		num += <-ch
+		//fmt.Println(num)
+	}
+}
+
+func testConcurrentCas(t *testing.T) {
+	ch := make(chan int)
+	for i := 0; i < MAX_CLIENTS; i++ {
+		conn, err := net.Dial("tcp", ":5000")
+		defer conn.Close()
+		if err != nil {
+			t.Errorf("too many clients")
+		}
+		go runCas(t, conn, i, ch)
+	}
+	num := 0
+	for num < MAX_CLIENTS {
+		num += <-ch
+		//fmt.Println(num)
+	}
+}
+
+func testConcurrentGetm(t *testing.T) {
+	ch := make(chan int)
+	for i := 0; i < MAX_CLIENTS; i++ {
+		conn, err := net.Dial("tcp", ":5000")
+		defer conn.Close()
+		if err != nil {
+			t.Errorf("too many clients")
+		}
+		go runGetm(t, conn, i, ch)
+	}
+	num := 0
+	for num < MAX_CLIENTS {
+		num += <-ch
+		//fmt.Println(num)
+	}
+}
+
+func testConcurrentDelete(t *testing.T) {
+	ch := make(chan int)
+	for i := 0; i < MAX_CLIENTS; i++ {
+		conn, err := net.Dial("tcp", ":5000")
+		defer conn.Close()
+		if err != nil {
+			t.Errorf("too many clients")
+		}
+		go runDelete(t, conn, i, ch)
+	}
+	num := 0
+	for num < MAX_CLIENTS {
+		num += <-ch
+		//fmt.Println(num)
+	}
+}
+
+func runSet(t *testing.T, conn net.Conn, i int, ch chan int) {
+	version := 1
+	for j := 0; j < MAX_CMD_NUM; j++ {
+		cases := TestCasePair{[]byte("set somekey" + strconv.Itoa(i) + " 0 5" + CRLF + "12345" + CRLF), []byte("OK " + strconv.Itoa(version) + CRLF)}
+		doTest(t, cases, conn)
+		//fmt.Println(i)
+		version++
+	}
+	//fmt.Println(i)
+	ch <- 1
+}
+
+func runGet(t *testing.T, conn net.Conn, i int, ch chan int) {
+	for j := 0; j < MAX_CMD_NUM; j++ {
+		cases := TestCasePair{[]byte("get somekey" + strconv.Itoa(i) + CRLF), []byte("VALUE 5" + CRLF + "12345" + CRLF)}
+		doTest(t, cases, conn)
+		//fmt.Println(i)
+	}
+	//fmt.Println(i)
+	ch <- 1
+}
+
+func runCas(t *testing.T, conn net.Conn, i int, ch chan int) {
+	version := MAX_CMD_NUM
+	for j := 0; j < MAX_CMD_NUM; j++ {
+		cases := TestCasePair{[]byte("cas somekey" + strconv.Itoa(i) + " 0 " + strconv.Itoa(version) + " 5" + CRLF + "12345" + CRLF), []byte("OK " + strconv.Itoa(version+1) + CRLF)}
+		doTest(t, cases, conn)
+		//fmt.Println(i)
+		version++
+	}
+	//fmt.Println(i)
+	ch <- 1
+}
+
+func runGetm(t *testing.T, conn net.Conn, i int, ch chan int) {
+	version := MAX_CMD_NUM
+	for j := 0; j < MAX_CMD_NUM; j++ {
+		cases := TestCasePair{[]byte("getm somekey" + strconv.Itoa(i) + CRLF), []byte("VALUE " + strconv.Itoa(version) + " 0 5" + CRLF + "12345" + CRLF)}
+		doTest(t, cases, conn)
+		//fmt.Println(i)
+	}
+	//fmt.Println(i)
+	ch <- 1
+}
+
+func runDelete(t *testing.T, conn net.Conn, i int, ch chan int) {
+	cases := TestCasePair{[]byte("delete somekey" + strconv.Itoa(i) + CRLF), []byte("DELETED" + CRLF)}
+	doTest(t, cases, conn)
+	ch <- 1
 }
