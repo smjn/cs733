@@ -1,25 +1,24 @@
-# memcache clone
+# Memcache clone
 
-Assignment1 files for cs733 course
+Assignment 1 of course Engineering a Cloud, CS733, IIT Bombay
+Sushant Mahajan
 
-Comprizes the memcache implementation (key value store)
+The project includes 2 files:
+* server.go - This has the main code implementing the protocol mentioned below.
+* server_test.go - Test cases of various commands and scenarios.
 
-completed:
+Memcache is synonymous with key value store that forms an integral part of any cloud infrastructure.
 
--validations for various commands
+In this project we have implemented the following commands:
 
--set, get, getm, cas, delete functionality working when user gives input
+* set - This command allows user to insert a new key into the store and the reply from server is `OK <version>\r\n` where version is key version. Version is incremented on each set for each key individually.
 
--expired keys deleted when requested but user notified as ERR_NOT_FOUND
+* get - This command fetched the value corresponding to the key. If key is expired or not found, user is appropriately notified or the value is sent `VALUE <numbytes>\r\n<value bytes>\r\n`
 
--server sending appropriate output
+* getm - This command fetches the value of the key along with other key parameters like time left to expiry, current version
 
--read/write sync between client server working fine
+* cas - Short for compare and swap. This takes the key name, version and new value as input and returns new version of the changed key. Errors and notified appropriately.
 
--test cases for single client complete
+* delete - Deletes a key from the server, error if key is expired or not found.
 
--user allowed to send CR, LF as value bytes
-
-yet to complete:
-
--test cases for parallel connections
+All functions use locking mechanisms to provide concurrency. For performance reasons, if a user asks for a key and it is expired, the user is notified as not found and the key is deleted.
