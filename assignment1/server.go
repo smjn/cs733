@@ -380,7 +380,7 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 }
 
 /*
- *Helper function to read value or cause timeout after 5 seconds
+ *Helper function to read value or cause timeout after READ_TIMEOUT seconds
  *parameters: channel to read data from, threshold number of bytes to read
  *returns: the value string and error state
  */
@@ -518,6 +518,7 @@ func performGetm(conn net.Conn, tokens []string, table *KeyValueStore) (*Data, b
 		data.expTime = v.expTime
 		data.numBytes = v.numBytes
 		data.value = v.value[:]
+		data.isPerpetual = v.isPerpetual
 
 		return data, true
 	} else {
@@ -626,14 +627,14 @@ func CustomSplitter(data []byte, atEOF bool) (advance int, token []byte, err err
 		return 0, nil, nil
 	}
 	for {
-		if i := bytes.IndexByte(data[omega:], '\n'); i > 0 {
+		if i := bytes.IndexByte(data[omega:], '\n'); i >= 0 {
 			//here we add omega as we are using the complete data array instead of the slice where we found '\n'
-			if data[omega+i-1] == '\r' {
+			if i > 0 && data[omega+i-1] == '\r' {
 				//next byte begins at i+1 and data[0:i+1] returned
 				return omega + i + 1, data[:omega+i+1], nil
 			} else {
 				//move the omega index to the byte after \n
-				omega = i + 1
+				omega += i + 1
 			}
 		} else {
 			//need to break free the chains

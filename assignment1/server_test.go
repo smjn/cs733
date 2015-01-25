@@ -43,9 +43,11 @@ func testIndividualCommands(t *testing.T) {
 		{[]byte("set e 200 10" + CRLF + "1234\r6789" + CRLF), []byte("ERR_CMD_ERR" + CRLF)},                         //value length less (error)
 		//key length high (250 bytes)
 		{[]byte("set 1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890 200 10" + CRLF + "1234\r67890" + CRLF), []byte("OK 9" + CRLF)},
+		{[]byte("set cn 100 10" + CRLF + "1234\n\n7890" + CRLF), []byte("OK 10" + CRLF)},   //contiguous newlines in value
+		{[]byte("set cn 100 10" + CRLF + "12\n4\n\n78\r0" + CRLF), []byte("OK 11" + CRLF)}, //contiguous newlines in value
 
 		//version update
-		{[]byte("set changing 200 2" + CRLF + "12" + CRLF + "set changing 200 2" + CRLF + "12" + CRLF + "set changing 200 2" + CRLF + "12" + CRLF), []byte("OK 10" + CRLF + "OK 11" + CRLF + "OK 12" + CRLF)},
+		{[]byte("set changing 200 2" + CRLF + "12" + CRLF + "set changing 200 2" + CRLF + "12" + CRLF + "set changing 200 2" + CRLF + "12" + CRLF), []byte("OK 12" + CRLF + "OK 13" + CRLF + "OK 14" + CRLF)},
 
 		//key length high (251 bytes), error
 		{[]byte("set 12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901 200 10" + CRLF + "1234\r67890" + CRLF), []byte("ERR_CMD_ERR" + CRLF + "ERR_CMD_ERR" + CRLF)},
@@ -70,8 +72,8 @@ func testIndividualCommands(t *testing.T) {
 
 		/*test delete command*/
 		//set some keys first
-		{[]byte("set d1 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 13" + CRLF)}, //some key will be deleted
-		{[]byte("set d2 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 14" + CRLF)}, //some key will be deleted
+		{[]byte("set d1 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 15" + CRLF)}, //some key will be deleted
+		{[]byte("set d2 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 16" + CRLF)}, //some key will be deleted
 		//deletion begins
 		{[]byte("delete a" + CRLF), []byte(DELETED + CRLF)},                  //delete normal key
 		{[]byte("delete l" + CRLF), []byte(ERR_NOT_FOUND + CRLF)},            //delete expired key
@@ -81,10 +83,10 @@ func testIndividualCommands(t *testing.T) {
 
 		/*test cas command*/
 		//set some keys first
-		{[]byte("set c1 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 15" + CRLF)}, //some key will be deleted
-		{[]byte("set c2 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 16" + CRLF)}, //some key will be deleted
+		{[]byte("set c1 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 17" + CRLF)}, //some key will be deleted
+		{[]byte("set c2 200 10" + CRLF + "1234567890" + CRLF), []byte("OK 18" + CRLF)}, //some key will be deleted
 		//set new value of version 15 key c1 and retrieve the result
-		{[]byte("cas c1 300 15 9" + CRLF + "123456789" + CRLF), []byte("OK 17" + CRLF)},                              //cas key set earlier
+		{[]byte("cas c1 300 17 9" + CRLF + "123456789" + CRLF), []byte("OK 19" + CRLF)},                              //cas key set earlier
 		{[]byte("get c1" + CRLF), []byte("VALUE 9" + CRLF + "123456789" + CRLF)},                                     //verify cas'ed key
 		{[]byte("cas m 2 4 5" + CRLF + "12345" + CRLF), []byte("ERR_NOT_FOUND" + CRLF)},                              //cas expired key
 		{[]byte("cas non_existant 2 4 5" + CRLF + "12345" + CRLF), []byte("ERR_NOT_FOUND" + CRLF)},                   //cas non-existant key
@@ -99,6 +101,15 @@ func testIndividualCommands(t *testing.T) {
 		{[]byte("cas c2 100 5 5 6" + CRLF + "12345" + CRLF), []byte("ERR_CMD_ERR" + CRLF + "ERR_CMD_ERR" + CRLF)},    //invalid arg num >
 		{[]byte("cas c2 100 5" + CRLF + "12345" + CRLF), []byte("ERR_CMD_ERR" + CRLF + "ERR_CMD_ERR" + CRLF)},        //invalid arg num <
 
+		/*test getm commands*/
+		{[]byte("getm c" + CRLF), []byte("VALUE 8 0 10" + CRLF + "12345" + CRLF + "890" + CRLF)}, //perpetual key
+		{[]byte("getm non_existant" + CRLF), []byte("ERR_NOT_FOUND" + CRLF)},                     //non-existant key
+		{[]byte("getm a" + CRLF), []byte("ERR_NOT_FOUND" + CRLF)},                                //deleted key
+		{[]byte("getm c x" + CRLF), []byte("ERR_CMD_ERR" + CRLF)},                                //invalid args >
+		{[]byte("getm" + CRLF), []byte("ERR_CMD_ERR" + CRLF)},                                    //invalid args <
+
+		//invalid key size
+		{[]byte("get 12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901" + CRLF), []byte(ERR_CMD_ERR + CRLF)},
 	}
 
 	for i, e := range cases {
@@ -106,7 +117,7 @@ func testIndividualCommands(t *testing.T) {
 		conn.Write(e.command)
 		n, _ := conn.Read(buf)
 		if !bytes.Equal(buf[:n], e.expected) {
-			fmt.Println(buf[:n], e.expected, "S:"+string(buf[:n]), "E:"+string(e.expected))
+			fmt.Println(buf[:n], e.expected, "S:"+string(buf[:n]), "E:"+string(e.expected), "C:"+string(e.command))
 			t.Errorf("Error occured for case:" + strconv.Itoa(i))
 		}
 	}
