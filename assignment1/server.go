@@ -259,6 +259,8 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 		return
 	}
 
+	//fmt.Println(tokens)
+
 	//for efficient string concatenation
 	var buffer bytes.Buffer
 	switch tokens[0] {
@@ -660,9 +662,10 @@ func main() {
 
 	//toLog = "s"
 	if toLog != "" {
-		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		defer logf.Close()
 		logger = log.New(logf, "SERVER: ", log.Ltime|log.Lshortfile)
+		//logger = log.New(os.Stdout, "SERVER: ", log.Ltime|log.Lshortfile)
 	} else {
 		logger = log.New(ioutil.Discard, "SERVER: ", log.Ldate)
 	}
