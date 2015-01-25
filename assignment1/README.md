@@ -4,11 +4,11 @@ Comprizes the memcache implementation (key value store)
 completed:
 	-validations for various commands
 	-set, get, getm, cas, delete functionality working when user gives input
-	-deletion of expired keys? Or let them stay
+	-expired keys deleted when requested but user notified as ERR_NOT_FOUND
 	-server sending appropriate output
+	-read/write sync between client server working fine
+	-test cases for single client complete
+	-user allowed to send CR, LF as value bytes
 
 yet to complete:
-	-when sending commands from test case, read/write sync breaks
-	-test cases need to be made
-
-Note: inorder to run test cases you need to move the client.go file somewhere else
+	-test cases for parallel connections
