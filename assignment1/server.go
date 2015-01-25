@@ -57,11 +57,11 @@ type KeyValueStore struct {
 	sync.RWMutex                  //mutex for synchronization when reading or writing to the hashtable
 }
 
-//global version counter
-var ver uint64
-
 //pointer to custom logger
 var logger *log.Logger
+
+//cache
+var table *KeyValueStore
 
 /*Function to start the server and accept connections.
  *arguments: none
@@ -75,7 +75,7 @@ func startServer() {
 	}
 
 	//initialize key value store
-	table := &KeyValueStore{dictionary: make(map[string]*Data)}
+	table = &KeyValueStore{dictionary: make(map[string]*Data)}
 
 	//infinite loop
 	for {
@@ -458,9 +458,8 @@ func performSet(conn net.Conn, tokens []string, table *KeyValueStore, ch chan []
 			val = new(Data)
 			table.dictionary[k] = val
 		}
-		ver++
 		val.numBytes = n
-		val.version = ver
+		val.version++
 		if e == 0 {
 			val.isPerpetual = true
 			val.expTime = 0
@@ -561,8 +560,7 @@ func performCas(conn net.Conn, tokens []string, table *KeyValueStore, ch chan []
 						val.expTime = e + uint64(time.Now().Unix())
 					}
 					val.numBytes = n
-					ver++
-					val.version = ver
+					val.version++
 					val.value = v
 					//key found and changed
 					return val.version, 0, r
@@ -654,8 +652,6 @@ func CustomSplitter(data []byte, atEOF bool) (advance int, token []byte, err err
  *return: none
  */
 func main() {
-	ver = 1
-
 	toLog := ""
 	if len(os.Args) > 1 {
 		toLog = os.Args[1]
@@ -674,4 +670,12 @@ func main() {
 	go startServer()
 	var input string
 	fmt.Scanln(&input)
+}
+
+//server will not call this, we'll call it from test cases to clear the map
+func ReInitServer() {
+	for key, _ := range table.dictionary {
+		delete(table.dictionary, key)
+	}
+	//fmt.Println(table.dictionary)
 }
