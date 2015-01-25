@@ -269,7 +269,7 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 			return
 		}
 		if ver, ok, r := performSet(conn, tokens[1:len(tokens)], table, ch); ok {
-			debug(table)
+			//debug(table)
 			logger.Println(ver)
 			if r {
 				buffer.Reset()
@@ -299,7 +299,7 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 			buffer.WriteString(ERR_NOT_FOUND)
 			write(conn, buffer.String())
 		}
-		debug(table)
+		//debug(table)
 
 	case GETM:
 		if isValid(GETM, tokens, conn) != 0 {
@@ -328,7 +328,7 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 			buffer.WriteString(ERR_NOT_FOUND)
 			write(conn, buffer.String())
 		}
-		debug(table)
+		//debug(table)
 
 	case CAS:
 		if isValid(CAS, tokens, conn) != 0 {
@@ -359,7 +359,7 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 				}
 			}
 		}
-		debug(table)
+		//debug(table)
 
 	case DELETE:
 		if isValid(DELETE, tokens, conn) != 0 {
@@ -370,7 +370,7 @@ func parseInput(conn net.Conn, msg string, table *KeyValueStore, ch chan []byte)
 		} else {
 			write(conn, ERR_NOT_FOUND)
 		}
-		debug(table)
+		//debug(table)
 
 	default:
 		buffer.Reset()
@@ -674,6 +674,8 @@ func main() {
 
 //server will not call this, we'll call it from test cases to clear the map
 func ReInitServer() {
+	defer table.Unlock()
+	table.Lock()
 	for key, _ := range table.dictionary {
 		delete(table.dictionary, key)
 	}
