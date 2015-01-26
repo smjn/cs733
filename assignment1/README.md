@@ -1,7 +1,9 @@
 # Memcache clone
 
 Assignment 1 of course Engineering a Cloud, CS733, IIT Bombay
+
 Author:Sushant Mahajan
+
 Discussed with:
 * Harshit Pande			133050040
 * Bharath Radhakrishnan	133050014
