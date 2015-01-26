@@ -1,7 +1,10 @@
 # Memcache clone
 
 Assignment 1 of course Engineering a Cloud, CS733, IIT Bombay
-Sushant Mahajan
+Author:Sushant Mahajan
+Discussed with:
+* Harshit Pande			133050040
+* Bharath Radhakrishnan	133050014
 
 The project includes 2 files:
 * server.go - This has the main code implementing the protocol mentioned below.
