@@ -27,6 +27,10 @@ type ClusterConfig struct {
 	Servers []ServerConfig // All servers in this cluster
 }
 
+type SharedLogData struct {
+	LogEntryData []
+}
+
 func NewServerConfig(server_id int) (*ServerConfig, error) {
 	this_server := new(ServerConfig)
 	this_server.Id = server_id
