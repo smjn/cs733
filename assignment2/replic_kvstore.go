@@ -15,6 +15,22 @@ const (
 	CLIENT_PORT = 9000
 )
 
+//type Lsn uint64 //Log sequence number, unique for all time.
+
+type ErrRedirect int // See Log.Append. Implements Error interface.
+
+type LogEntry interface {
+	Lsn() uint64
+	Data() []byte
+	Committed() bool
+}
+
+type LogEntryData struct {
+	Id        uint64
+	Data      []byte
+	Committed bool
+}
+
 type ServerConfig struct {
 	Id         int    // Id of server. Must be unique
 	Hostname   string // name or ip of host
@@ -30,6 +46,18 @@ type ClusterConfig struct {
 type ErrRedirect int
 
 var cluster_config *ClusterConfig
+
+func Lsn(entry *LogEntryData) uint64 {
+	return entry.Id
+}
+
+func Data(entry *LogEntryData) []byte {
+	return entry.Data
+}
+
+func Committed(entry *LogEntryData) bool {
+	return entry.Committed
+}
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
 	this_server := new(ServerConfig)
