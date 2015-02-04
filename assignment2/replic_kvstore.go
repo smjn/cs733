@@ -26,7 +26,7 @@ type LogEntry interface {
 }
 
 type LogEntryData struct {
-	id        uint64
+	id        Lsn
 	data      []byte
 	committed bool
 }
@@ -49,12 +49,24 @@ type SharedLog interface {
 
 type Raft struct {
 	//some good stuff needs to go here
+	commitCh chan *LogEntryData
 }
 
 var cluster_config *ClusterConfig
 
+//goroutine that monitors channel for commiting log entry
+func monitor_commitCh(c <-chan *LogEntryData) { //unidirectional -- can only read from the channel
+	for {
+		var temp *LogEntryData
+		temp = <-c //receive from the channel
+		temp.committed = true
+
+		//now update key value store here
+	}
+}
+
 //make LogEntryData implement the
-func (entry *LogEntryData) Lsn() uint64 {
+func (entry *LogEntryData) Lsn() Lsn {
 	return entry.id
 }
 
