@@ -54,7 +54,7 @@ func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
 }
 
 func (e ErrRedirect) Error() string {
-	return "Redirect to server " + strconv.Itoa(cluster_config.Servers[0].Id)
+	return "Redirect to server " + cluster_config.Servers[0].Hostname + " " + cluster_config.Servers[0].ClientPort
 }
 
 func main() {
