@@ -47,7 +47,7 @@ type ErrRedirect int
 
 var cluster_config *ClusterConfig
 
-func Lsn(entry *LogEntryData) Lsn {
+func Lsn(entry *LogEntryData) uint64 {
 	return entry.Id
 }
 
