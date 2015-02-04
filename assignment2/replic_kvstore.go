@@ -1,9 +1,6 @@
 package main
 
 import (
-	//"log"
-	//"net"
-	//"net/rpc"
 	"fmt"
 	"os"
 	"reflect"
