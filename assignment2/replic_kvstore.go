@@ -15,6 +15,22 @@ const (
 	CLIENT_PORT = 9000
 )
 
+//type Lsn uint64 //Log sequence number, unique for all time.
+
+type ErrRedirect int // See Log.Append. Implements Error interface.
+
+type LogEntry interface {
+	Lsn() uint64
+	Data() []byte
+	Committed() bool
+}
+
+type LogEntryData struct {
+	Id        uint64
+	Data      []byte
+	Committed bool
+}
+
 type ServerConfig struct {
 	Id         int    // Id of server. Must be unique
 	Hostname   string // name or ip of host
@@ -27,16 +43,20 @@ type ClusterConfig struct {
 	Servers []ServerConfig // All servers in this cluster
 }
 
-type SharedLogData struct {
-	LogEntryData []log_array
-}
-
 type ErrRedirect int
 
 var cluster_config *ClusterConfig
 
-func (log *SharedLogData) Append(data []byte) (LogEntry, error) {
+func Lsn(entry *LogEntryData) uint64 {
+	return entry.Id
+}
 
+func Data(entry *LogEntryData) []byte {
+	return entry.Data
+}
+
+func Committed(entry *LogEntryData) bool {
+	return entry.Committed
 }
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
@@ -62,7 +82,7 @@ func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
 }
 
 func (e ErrRedirect) Error() string {
-	return "Redirect to server " + strconv.Itoa(cluster_config.Servers[0].Id)
+	return "Redirect to server " + cluster_config.Servers[0].Hostname + " " + cluster_config.Servers[0].ClientPort
 }
 
 func main() {
