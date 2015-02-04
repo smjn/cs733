@@ -28,7 +28,15 @@ type ClusterConfig struct {
 }
 
 type SharedLogData struct {
-	LogEntryData []
+	LogEntryData []log_array
+}
+
+type ErrRedirect int
+
+var cluster_config *ClusterConfig
+
+func (log *SharedLogData) Append(data []byte) (LogEntry, error) {
+
 }
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
@@ -41,16 +49,20 @@ func NewServerConfig(server_id int) (*ServerConfig, error) {
 }
 
 func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
-	cluster_config := new(ClusterConfig)
-	cluster_config.Path = ""
-	cluster_config.Servers = make([]ServerConfig, num_servers)
+	config := new(ClusterConfig)
+	config.Path = ""
+	config.Servers = make([]ServerConfig, num_servers)
 
 	for i := 1; i <= num_servers; i++ {
 		curr_server, _ := NewServerConfig(i)
-		cluster_config.Servers[i-1] = *(curr_server)
+		config.Servers[i-1] = *(curr_server)
 	}
 
-	return cluster_config, nil
+	return config, nil
+}
+
+func (e ErrRedirect) Error() string {
+	return "Redirect to server " + strconv.Itoa(cluster_config.Servers[0].Id)
 }
 
 func main() {
