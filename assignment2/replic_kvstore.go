@@ -51,8 +51,7 @@ type Raft struct {
 	//some good stuff needs to go here
 	commitCh chan *LogEntryData
 	cluster  *ClusterConfig //cluster
-	id       uint64         //leader
-	commitCh chan LogEntry
+	id       uint64         //current server id
 }
 
 var cluster_config *ClusterConfig
@@ -63,7 +62,6 @@ func monitor_commitCh(c <-chan *LogEntryData) { //unidirectional -- can only rea
 		var temp *LogEntryData
 		temp = <-c //receive from the channel
 		temp.committed = true
-
 		//now update key value store here
 	}
 }
@@ -83,17 +81,20 @@ func (entry *LogEntryData) Committed() bool {
 
 //make raft implement the append function
 func (raft *Raft) Append(data []byte) (LogEntry, error) {
-	if raft.server.Id != 0 {
-		return nil, raft.Id
+	if raft.id != 0 {
+		return nil, ErrRedirect(0)
 	}
-	temp := LogEntry{1, data, false}
+	temp := &LogEntryData{1, data, false}
 	//broadcast to other servers
 	//wait for acks
 	//send commit on channel
 	raft.commitCh <- temp
+	return temp, nil
 }
 
-func AppendEntriesRPC()
+func AppendEntriesRPC() {
+
+}
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
 	server := new(ServerConfig)
@@ -118,7 +119,7 @@ func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
 }
 
 func (e ErrRedirect) Error() string {
-	return "Redirect to server " + strconv.Itoa(cluster_config.Servers[0].Id)
+	return "Redirect to server " + strconv.Itoa(0)
 }
 
 func main() {
