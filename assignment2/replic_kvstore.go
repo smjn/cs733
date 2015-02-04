@@ -36,12 +36,32 @@ func NewServerConfig(server_id int) (*ServerConfig, error) {
 	return this_server, nil
 }
 
+func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
+	cluster_config := new(ClusterConfig)
+	cluster_config.Path = ""
+	cluster_config.Servers = make([]ServerConfig, num_servers)
+
+	for i := 1; i <= num_servers; i++ {
+		curr_server, _ := NewServerConfig(i)
+		cluster_config.Servers[i-1] = *(curr_server)
+	}
+
+	return cluster_config, nil
+}
+
 func main() {
 	server_id, err := strconv.Atoi(os.Args[1])
 	if err != nil {
 		fmt.Println("argument ", os.Args[1], "is not string")
 	}
 	this_server, _ := NewServerConfig(server_id)
-	fmt.Println(reflect.TypeOf(this_server))
 
+	num_servers, err2 := strconv.Atoi((os.Args[2]))
+	if err2 != nil {
+		fmt.Println("argument ", os.Args[2], "is not string")
+	}
+	cluster_config, _ := NewClusterConfig(num_servers)
+
+	fmt.Println(reflect.TypeOf(this_server))
+	fmt.Println(reflect.TypeOf(cluster_config))
 }
