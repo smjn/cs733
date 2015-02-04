@@ -15,20 +15,20 @@ const (
 	CLIENT_PORT = 9000
 )
 
-//type Lsn uint64 //Log sequence number, unique for all time.
+type Lsn uint64 //Log sequence number, unique for all time.
 
 type ErrRedirect int // See Log.Append. Implements Error interface.
 
 type LogEntry interface {
-	Lsn() uint64
+	Lsn() Lsn
 	Data() []byte
 	Committed() bool
 }
 
 type LogEntryData struct {
-	Id        uint64
-	Data      []byte
-	Committed bool
+	id        uint64
+	data      []byte
+	committed bool
 }
 
 type ServerConfig struct {
@@ -43,29 +43,40 @@ type ClusterConfig struct {
 	Servers []ServerConfig // All servers in this cluster
 }
 
-type ErrRedirect int
+type SharedLog interface {
+	Append(data []byte) (LogEntry, error)
+}
+
+type Raft struct {
+	//some good stuff needs to go here
+}
 
 var cluster_config *ClusterConfig
 
-func Lsn(entry *LogEntryData) uint64 {
-	return entry.Id
+//make LogEntryData implement the
+func (entry *LogEntryData) Lsn() uint64 {
+	return entry.id
 }
 
-func Data(entry *LogEntryData) []byte {
-	return entry.Data
+func (entry *LogEntryData) Data() []byte {
+	return entry.data
 }
 
-func Committed(entry *LogEntryData) bool {
-	return entry.Committed
+func (entry *LogEntryData) Committed() bool {
+	return entry.committed
 }
+
+//make raft implement the append function
+//func (raft *Raft) Append(data []byte) (LogEntry, error) {
+//}
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
-	this_server := new(ServerConfig)
-	this_server.Id = server_id
-	this_server.Hostname = "127.0.0.1"
-	this_server.ClientPort = CLIENT_PORT
-	this_server.LogPort = CLIENT_PORT + server_id
-	return this_server, nil
+	server := new(ServerConfig)
+	server.Id = server_id
+	server.Hostname = "127.0.0.1"
+	server.ClientPort = CLIENT_PORT
+	server.LogPort = CLIENT_PORT + server_id
+	return server, nil
 }
 
 func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
@@ -82,7 +93,7 @@ func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
 }
 
 func (e ErrRedirect) Error() string {
-	return "Redirect to server " + cluster_config.Servers[0].Hostname + " " + cluster_config.Servers[0].ClientPort
+	return "Redirect to server " + strconv.Itoa(cluster_config.Servers[0].Id)
 }
 
 func main() {
