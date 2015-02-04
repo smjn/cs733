@@ -50,6 +50,9 @@ type SharedLog interface {
 type Raft struct {
 	//some good stuff needs to go here
 	commitCh chan *LogEntryData
+	cluster  *ClusterConfig //cluster
+	id       uint64         //leader
+	commitCh chan LogEntry
 }
 
 var cluster_config *ClusterConfig
@@ -79,8 +82,18 @@ func (entry *LogEntryData) Committed() bool {
 }
 
 //make raft implement the append function
-//func (raft *Raft) Append(data []byte) (LogEntry, error) {
-//}
+func (raft *Raft) Append(data []byte) (LogEntry, error) {
+	if raft.server.Id != 0 {
+		return nil, raft.Id
+	}
+	temp := LogEntry{1, data, false}
+	//broadcast to other servers
+	//wait for acks
+	//send commit on channel
+	raft.commitCh <- temp
+}
+
+func AppendEntriesRPC()
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
 	server := new(ServerConfig)
