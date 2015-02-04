@@ -1,10 +1,10 @@
 package main
 
 import (
-	//"log"
-	//"net"
-	//"net/rpc"
 	"fmt"
+	"log"
+	"net"
+	"net/rpc"
 	"os"
 	"reflect"
 	"strconv"
@@ -26,7 +26,7 @@ type LogEntry interface {
 }
 
 type LogEntryData struct {
-	id        uint64
+	id        Lsn
 	data      []byte
 	committed bool
 }
@@ -54,7 +54,7 @@ type Raft struct {
 var cluster_config *ClusterConfig
 
 //make LogEntryData implement the
-func (entry *LogEntryData) Lsn() uint64 {
+func (entry *LogEntryData) Lsn() Lsn {
 	return entry.id
 }
 
@@ -96,6 +96,34 @@ func (e ErrRedirect) Error() string {
 	return "Redirect to server " + strconv.Itoa(cluster_config.Servers[0].Id)
 }
 
+type Args struct {
+	X int
+}
+
+type AppendEntries struct{}
+
+func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *int) error {
+	*reply = args.X
+	return nil
+}
+
+func initializeInterServerCommunication(this_server *ServerConfig) {
+	appendRpc := new(AppendEntries)
+	rpc.Register(appendRpc)
+	listener, e := net.Listen("tcp", ":"+strconv.Itoa(this_server.LogPort))
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	for {
+		if conn, err := listener.Accept(); err != nil {
+			log.Fatal("accept error: " + err.Error())
+		} else {
+			log.Printf("new connection established\n")
+			go rpc.ServeConn(conn)
+		}
+	}
+}
+
 func main() {
 	server_id, err := strconv.Atoi(os.Args[1])
 	if err != nil {
@@ -111,4 +139,5 @@ func main() {
 
 	fmt.Println(reflect.TypeOf(this_server))
 	fmt.Println(reflect.TypeOf(cluster_config))
+	initializeInterServerCommunication(this_server)
 }
