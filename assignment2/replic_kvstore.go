@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-<<<<<<< HEAD
-=======
 	"log"
 	"net"
 	"net/rpc"
->>>>>>> 67cd155b37c8122a61dfc1cfdaead50ea7f5729a
 	"os"
 	"reflect"
 	"strconv"
@@ -56,6 +53,12 @@ type Raft struct {
 	cluster_config *ClusterConfig //cluster
 	id             int            //this server id
 }
+
+type Args struct {
+	X int
+}
+
+type AppendEntries struct{}
 
 var cluster_config *ClusterConfig
 
@@ -108,14 +111,6 @@ func (raft *Raft) Append(data []byte) (LogEntry, error) {
 	return temp, nil
 }
 
-type RPChandle struct {
-}
-
-func (r *RPChandle) AppendEntriesRPC(log_entry LogEntryData) bool {
-
-	return true
-}
-
 func NewServerConfig(server_id int) (*ServerConfig, error) {
 	server := new(ServerConfig)
 	server.Id = server_id
@@ -145,12 +140,6 @@ func (e ErrRedirect) Error() string {
 func start_rpc(this_server *ServerConfig) {
 	//rpc.Register()
 }
-
-type Args struct {
-	X int
-}
-
-type AppendEntries struct{}
 
 func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *int) error {
 	*reply = args.X
