@@ -2,6 +2,12 @@ package main
 
 import (
 	"fmt"
+<<<<<<< HEAD
+=======
+	"log"
+	"net"
+	"net/rpc"
+>>>>>>> 67cd155b37c8122a61dfc1cfdaead50ea7f5729a
 	"os"
 	"reflect"
 	"strconv"
@@ -140,6 +146,34 @@ func start_rpc(this_server *ServerConfig) {
 	//rpc.Register()
 }
 
+type Args struct {
+	X int
+}
+
+type AppendEntries struct{}
+
+func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *int) error {
+	*reply = args.X
+	return nil
+}
+
+func initializeInterServerCommunication(this_server *ServerConfig) {
+	appendRpc := new(AppendEntries)
+	rpc.Register(appendRpc)
+	listener, e := net.Listen("tcp", ":"+strconv.Itoa(this_server.LogPort))
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	for {
+		if conn, err := listener.Accept(); err != nil {
+			log.Fatal("accept error: " + err.Error())
+		} else {
+			log.Printf("new connection established\n")
+			go rpc.ServeConn(conn)
+		}
+	}
+}
+
 func main() {
 	server_id, err := strconv.Atoi(os.Args[1])
 	if err != nil {
@@ -155,8 +189,7 @@ func main() {
 
 	fmt.Println(reflect.TypeOf(this_server))
 	fmt.Println(reflect.TypeOf(cluster_config))
-
-	go start_rpc(this_server)
+	initializeInterServerCommunication(this_server)
 
 	var dummy_input string
 	fmt.Scanln(&dummy_input)
