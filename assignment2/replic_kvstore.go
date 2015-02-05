@@ -80,6 +80,25 @@ func monitor_commitCh(c <-chan LogEntry) { //unidirectional -- can only read fro
 	}
 }
 
+//goroutine that monitors channel to check if the majority of servers have replied
+func monitor_ackCh(rft *Raft, ack_ch <-chan int, log_entry LogEntry) {
+	acks_received := 0
+	num_servers := len(rft.cluster_config.Servers)
+	required_acks := num_servers / 2
+	if num_servers%2 == 0 {
+		required_acks++
+	}
+
+	for {
+		temp := <-ack_ch
+		acks_received += temp
+		if acks_received == required_acks {
+			rft.commitCh <- log_entry
+			break
+		}
+	}
+}
+
 //make LogEntryData implement the
 func (entry *LogEntryData) Lsn() Lsn {
 	return entry.id
