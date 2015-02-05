@@ -45,20 +45,28 @@ type SharedLog interface {
 }
 
 type Raft struct {
-	//some good stuff needs to go here
-	commitCh chan *LogEntryData
-	cluster  *ClusterConfig //cluster
-	id       uint64         //current server id
+	log_array      []*LogEntryData
+	commitCh       chan LogEntry
+	cluster_config *ClusterConfig //cluster
+	id             int            //this server id
 }
 
 var cluster_config *ClusterConfig
 
+func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
+	rft := new(Raft)
+	rft.commitCh = commitCh
+	rft.cluster_config = config
+	rft.id = thisServerId
+	return rft, nil
+}
+
 //goroutine that monitors channel for commiting log entry
-func monitor_commitCh(c <-chan *LogEntryData) { //unidirectional -- can only read from the channel
+func monitor_commitCh(c <-chan LogEntry) { //unidirectional -- can only read from the channel
 	for {
-		var temp *LogEntryData
-		temp = <-c //receive from the channel
-		temp.committed = true
+		//var temp LogEntry
+		temp := <-c //receive from the channel
+		temp.(*LogEntryData).committed = true
 		//now update key value store here
 	}
 }
@@ -81,7 +89,12 @@ func (raft *Raft) Append(data []byte) (LogEntry, error) {
 	if raft.id != 0 {
 		return nil, ErrRedirect(0)
 	}
-	temp := &LogEntryData{1, data, false}
+	temp := new(LogEntryData)
+	temp.id = 1
+	temp.committed = false
+	temp.data = data
+	raft.log_array = append(raft.log_array, temp)
+
 	//broadcast to other servers
 	//wait for acks
 	//send commit on channel
@@ -89,8 +102,12 @@ func (raft *Raft) Append(data []byte) (LogEntry, error) {
 	return temp, nil
 }
 
-func AppendEntriesRPC() {
+type RPChandle struct {
+}
 
+func (r *RPChandle) AppendEntriesRPC(log_entry LogEntryData) bool {
+
+	return true
 }
 
 func NewServerConfig(server_id int) (*ServerConfig, error) {
@@ -119,6 +136,10 @@ func (e ErrRedirect) Error() string {
 	return "Redirect to server " + strconv.Itoa(0)
 }
 
+func start_rpc(this_server *ServerConfig) {
+	//rpc.Register()
+}
+
 func main() {
 	server_id, err := strconv.Atoi(os.Args[1])
 	if err != nil {
@@ -134,4 +155,9 @@ func main() {
 
 	fmt.Println(reflect.TypeOf(this_server))
 	fmt.Println(reflect.TypeOf(cluster_config))
+
+	go start_rpc(this_server)
+
+	var dummy_input string
+	fmt.Scanln(&dummy_input)
 }
