@@ -10,6 +10,7 @@ import (
 //constant values used
 const (
 	CLIENT_PORT = 9000
+	LOG_PORT    = 8000
 	ACK_TIMEOUT = 5
 )
 
@@ -19,21 +20,9 @@ var Info *log.Logger
 // Flag for enabling/disabling logging functionality
 var DEBUG = true
 
-type Lsn uint64 //Log sequence number, unique for all time.
-
 type ErrRedirect int // See Log.Append. Implements Error interface.
 
-type LogEntry interface {
-	Lsn() Lsn
-	Data() []byte
-	Committed() bool
-}
-
-type LogEntryData struct {
-	id        Lsn
-	data      []byte
-	committed bool
-}
+type Lsn uint64 //Log sequence number, unique for all time.
 
 type ServerConfig struct {
 	Id         int    // Id of server. Must be unique
@@ -58,6 +47,18 @@ type Raft struct {
 	id             int            //this server id
 }
 
+type LogEntry interface {
+	Lsn() Lsn
+	Data() []byte
+	Committed() bool
+}
+
+type LogEntryData struct {
+	id        Lsn
+	data      []byte
+	committed bool
+}
+
 type Args struct {
 	X int
 }
@@ -78,18 +79,8 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*
 	return rft, nil
 }
 
-//goroutine that monitors channel for commiting log entry
-func monitorCommitChannel(raft *Raft) { //unidirectional -- can only read from the channel
-	for {
-		//var temp LogEntry
-		temp := <-raft.commitCh                                  //receive from the channel
-		raft.log_array[temp.(*LogEntryData).id].committed = true //commit the value
-		//update the kv store here
-	}
-}
-
 //goroutine that monitors channel to check if the majority of servers have replied
-func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majEventCh chan int) {
+func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh chan bool) {
 	acks_received := 0
 	num_servers := len(rft.cluster_config.Servers)
 	required_acks := num_servers / 2
@@ -106,8 +97,9 @@ func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majEven
 		case temp := <-ack_ch:
 			acks_received += temp
 			if acks_received == required_acks {
+				rft.log_array[log_entry.(*LogEntryData).id].committed = true
 				rft.commitCh <- log_entry
-				majEventCh <- 1
+				majCh <- true
 				err = true
 				break
 			}
@@ -136,20 +128,19 @@ func (entry *LogEntryData) Committed() bool {
 }
 
 //make raft implement the append function
-func (raft *Raft) Append(data []byte) (LogEntry, error) {
-	if raft.id != 1 {
+func (rft *Raft) Append(data []byte, writeCh chan []byte) (LogEntry, error) {
+	if rft.id != 1 {
 		return nil, ErrRedirect(1)
 	}
 	temp := new(LogEntryData)
 	temp.id = 1
 	temp.committed = false
 	temp.data = data
-	raft.log_array = append(raft.log_array, temp)
+	rft.log_array = append(rft.log_array, temp)
 
 	ackChan := make(chan int)
-	majEventCh := make(chan int)
-	go monitorAckChannel(raft, ackChan, temp, majEventCh)
-	go monitorCommitChannel(raft)
+	majChan := make(chan bool)
+	go monitorAckChannel(rft, ackChan, temp, majChan)
 
 	for _, server := range cluster_config.Servers[1:] {
 		go func(ackChan chan int) {
@@ -164,19 +155,20 @@ func (raft *Raft) Append(data []byte) (LogEntry, error) {
 			ackChan <- reply.X
 		}(ackChan)
 	}
-	//channel will return 1 if majority
-	if <-majEventCh == 1 {
-		raft.commitCh <- temp
+
+	if <-majChan {
+		//
 	}
+
 	return temp, nil
 }
 
-func NewServerConfig(server_id int) (*ServerConfig, error) {
+func NewServerConfig(serverId int) (*ServerConfig, error) {
 	server := new(ServerConfig)
-	server.Id = server_id
+	server.Id = serverId
 	server.Hostname = "127.0.0.1"
-	server.ClientPort = CLIENT_PORT
-	server.LogPort = CLIENT_PORT + server_id
+	server.ClientPort = CLIENT_PORT + serverId
+	server.LogPort = LOG_PORT + serverId
 	return server, nil
 }
 
