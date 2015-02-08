@@ -1,4 +1,4 @@
-package main
+package raft
 
 import (
 	"fmt"
@@ -211,7 +211,8 @@ func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *Reply) error {
 	return nil
 }
 
-func initializeInterServerCommunication(this_server *ServerConfig) {
+func InitializeRaft(this_server *ServerConfig) {
+	initializeLogger(this_server.Id) //initialize the logger
 	appendRpc := new(AppendEntries)
 	rpc.Register(appendRpc)
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(this_server.LogPort))
@@ -241,28 +242,28 @@ func initializeLogger(serverId int) {
 	Info.Println("Initialized server")
 }
 
-func main() {
-	server_id, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		Info.Println("argument ", os.Args[1], "is not string")
-	}
+//func main() {
+//	server_id, err := strconv.Atoi(os.Args[1])
+//	if err != nil {
+//		Info.Println("argument ", os.Args[1], "is not string")
+//	}
 
-	initializeLogger(server_id)
-	Info.Println("Start")
+//	initializeLogger(server_id)
+//	Info.Println("Start")
 
-	this_server, _ := NewServerConfig(server_id)
+//	this_server, _ := NewServerConfig(server_id)
 
-	num_servers, err2 := strconv.Atoi((os.Args[2]))
-	if err2 != nil {
-		Info.Println("argument ", os.Args[2], "is not string")
-	}
-	cluster_config, _ := NewClusterConfig(num_servers)
+//	num_servers, err2 := strconv.Atoi((os.Args[2]))
+//	if err2 != nil {
+//		Info.Println("argument ", os.Args[2], "is not string")
+//	}
+//	cluster_config, _ := NewClusterConfig(num_servers)
 
-	Info.Println(reflect.TypeOf(this_server))
-	Info.Println(reflect.TypeOf(cluster_config))
+//	Info.Println(reflect.TypeOf(this_server))
+//	Info.Println(reflect.TypeOf(cluster_config))
 
-	initializeInterServerCommunication(this_server)
+//	initializeInterServerCommunication(this_server)
 
-	var dummy_input string
-	fmt.Scanln(&dummy_input)
-}
+//	var dummy_input string
+//	fmt.Scanln(&dummy_input)
+//}
