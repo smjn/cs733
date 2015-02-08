@@ -11,7 +11,7 @@ type Command struct {
 	Val []byte
 }
 
-func (d *Command) GobEncode() ([]byte, error) {
+func (d *Data) GobEncode() ([]byte, error) {
 	w := new(bytes.Buffer)
 	encoder := gob.NewEncoder(w)
 	err := encoder.Encode(d.Cmd)
@@ -25,7 +25,7 @@ func (d *Command) GobEncode() ([]byte, error) {
 	return w.Bytes(), nil
 }
 
-func (d *Command) GobDecode(buf []byte) error {
+func (d *Data) GobDecode(buf []byte) error {
 	r := bytes.NewBuffer(buf)
 	decoder := gob.NewDecoder(r)
 	err := decoder.Decode(&d.Cmd)
