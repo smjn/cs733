@@ -57,6 +57,7 @@ type LogEntryData struct {
 	id        Lsn
 	data      []byte
 	committed bool
+	conn      net.Conn
 }
 
 type Args struct {
@@ -128,7 +129,7 @@ func (entry *LogEntryData) Committed() bool {
 }
 
 //make raft implement the append function
-func (rft *Raft) Append(data []byte, writeCh chan []byte) (LogEntry, error) {
+func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 	if rft.id != 1 {
 		return nil, ErrRedirect(1)
 	}
@@ -136,6 +137,7 @@ func (rft *Raft) Append(data []byte, writeCh chan []byte) (LogEntry, error) {
 	temp.id = 1
 	temp.committed = false
 	temp.data = data
+	temp.conn = conn
 	rft.log_array = append(rft.log_array, temp)
 
 	ackChan := make(chan int)

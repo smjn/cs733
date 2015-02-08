@@ -523,9 +523,9 @@ func InitKVStore() {
 	table = &KeyValueStore{dictionary: make(map[string]*Data)}
 }
 
-func MonitorCommitChannel(ch chan LogEntry, conn) {
+func MonitorCommitChannel(ch chan LogEntry) {
 	for {
-		//do some shit
+		temp := <-ch
 	}
 }
 

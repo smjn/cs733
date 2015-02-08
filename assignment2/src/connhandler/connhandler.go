@@ -116,20 +116,11 @@ func Write(conn net.Conn, msg string) {
 	conn.Write(buf)
 }
 
-func ReplyToClient(conn net.Conn, writeCh chan []byte) {
-	for {
-		w := <-writeCh
-		Write(conn, string(w))
-	}
-}
-
 func HandleClient(conn net.Conn, rft *raft.Raft) {
 	defer conn.Close()
 	//channel for every connection for every client
 	ch := make(chan []byte)
-	writeCh := make(chan []byte)
 	go MyRead(ch, conn)
-	go ReplyToClient(conn, writeCh)
 
 	for {
 		command := new(utils.Command)
@@ -167,6 +158,6 @@ func HandleClient(conn net.Conn, rft *raft.Raft) {
 			//log.Fatal("encode error:", err)
 		}
 
-		rft.Append(buffer.Bytes(), writeCh)
+		rft.Append(buffer.Bytes())
 	}
 }
