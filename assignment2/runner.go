@@ -1,8 +1,8 @@
 package main
 
 import (
-	//"os"
 	"fmt"
+	"os"
 	//"log"
 	"os/exec"
 	"strconv"
@@ -16,12 +16,20 @@ const (
 
 func TestServersCommunic(i int) {
 	cmd := exec.Command("go", "run", "replic_kvstore.go", strconv.Itoa(i+1), strconv.Itoa(NUM_SERVERS))
-	out, err := cmd.CombinedOutput()
+	f, err := os.OpenFile(strconv.Itoa(i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
+		fmt.Println("error opening file: %v", err)
+	}
+
+	defer f.Close()
+	cmd.Stdout = f
+	cmd.Stderr = f
+	cmd.Run()
+	/*if err != nil {
 		fmt.Println(err)
 	}
 
-	fmt.Println(string(out))
+	fmt.Println(string(out))*/
 }
 
 func main() {

@@ -211,13 +211,8 @@ func initializeLogger(serverId int) {
 	if !DEBUG {
 		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	} else {
-		f, err := os.OpenFile(strconv.Itoa(serverId+CLIENT_PORT), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			fmt.Println("error opening file: %v", err)
-		}
 
-		defer f.Close()
-		Info = log.New(f, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
 
 	Info.Println("Initialized server")
