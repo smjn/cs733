@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"time"
 )
 
 //constant values used
@@ -234,8 +235,6 @@ func main() {
 	}
 	cluster_config, _ := NewClusterConfig(num_servers)
 
-	fmt.Println(reflect.TypeOf(this_server))
-	fmt.Println(reflect.TypeOf(cluster_config))
 	initializeInterServerCommunication(this_server)
 
 	var dummy_input string
