@@ -1,4 +1,17 @@
-package handler
+package connhandler
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/gob"
+	"kvstore"
+	"net"
+	"raft"
+	"strconv"
+	"strings"
+	"time"
+	"utils"
+)
 
 /*
  *Helper function to read value or cause timeout after READ_TIMEOUT seconds
@@ -13,7 +26,7 @@ func readValue(ch chan []byte, n uint64) ([]byte, bool) {
 	up := make(chan bool, 1)
 	//after 5 seconds passed reading value, we'll just send err to client
 	go func() {
-		time.Sleep(READ_TIMEOUT * time.Second)
+		time.Sleep(kvstore.READ_TIMEOUT * time.Second)
 		up <- true
 	}()
 
@@ -100,21 +113,52 @@ func MyRead(ch chan []byte, conn net.Conn) {
  */
 func Write(conn net.Conn, msg string) {
 	buf := []byte(msg)
-	buf = append(buf, []byte(CRLF)...)
+	buf = append(buf, []byte(kvstore.CRLF)...)
 	conn.Write(buf)
 }
 
-func handleClient(conn net.Conn) {
+func HandleClient(conn net.Conn, rft *raft.Raft) {
 	defer conn.Close()
 	//channel for every connection for every client
 	ch := make(chan []byte)
-	go myRead(ch, conn)
+	go MyRead(ch, conn)
 
 	for {
+		command := new(utils.Command)
 		msg := <-ch
 		if len(msg) == 0 {
 			continue
 		}
-		//kvstore.ParseInput(conn, string(msg), table, ch)
+		command.Cmd = msg
+		flag := false
+		nr := uint64(0)
+		tokens := strings.Fields(string(msg))
+		if kvstore.IsCas(tokens[0]) {
+			n, _ := strconv.ParseUint(tokens[3], 10, 64)
+			nr = n
+			flag = true
+		} else if kvstore.IsSet(tokens[0]) {
+			n, _ := strconv.ParseUint(tokens[2], 10, 64)
+			nr = n
+			flag = true
+		}
+		if flag {
+			if v, err := readValue(ch, nr); err {
+				Write(conn, kvstore.ERR_CMD_ERR)
+			} else {
+				command.Val = v
+				//command.isVal = true
+			}
+		}
+
+		buffer := new(bytes.Buffer)
+		// writing
+		enc := gob.NewEncoder(buffer)
+		err := enc.Encode(command)
+		if err != nil {
+			//log.Fatal("encode error:", err)
+		}
+
+		rft.Append(buffer.Bytes())
 	}
 }

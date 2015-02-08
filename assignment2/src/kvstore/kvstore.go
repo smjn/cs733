@@ -1,9 +1,7 @@
 package kvstore
 
 import (
-	"bufio"
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -107,16 +105,16 @@ var table *KeyValueStore
 //	}
 //}
 
-///*Simple write function to send information to the client
-// *arguments: client connection, msg to send to the client
-// *return: none
-// */
-//func write(conn net.Conn, msg string) {
-//	buf := []byte(msg)
-//	buf = append(buf, []byte(CRLF)...)
-//	logger.Println(buf, len(buf))
-//	conn.Write(buf)
-//}
+/*Simple write function to send information to the client
+ *arguments: client connection, msg to send to the client
+ *return: none
+ */
+func write(conn net.Conn, msg string) {
+	buf := []byte(msg)
+	buf = append(buf, []byte(CRLF)...)
+	//logger.Println(buf, len(buf))
+	conn.Write(buf)
+}
 
 /*After initial establishment of the connection with the client, this go routine handles further interaction
  *arguments: client connection
@@ -268,7 +266,7 @@ func ParseInput(conn net.Conn, msg string, ch chan []byte) {
 		if isValid(SET, tokens, conn) != 0 {
 			return
 		}
-		if ver, ok, r := performSet(conn, tokens[1:len(tokens)], table, ch); ok {
+		if ver, ok, r := performSet(conn, tokens[1:len(tokens)], ch); ok {
 			//debug(table)
 			logger.Println(ver)
 			if r {
@@ -284,7 +282,7 @@ func ParseInput(conn net.Conn, msg string, ch chan []byte) {
 		if isValid(GET, tokens, conn) != 0 {
 			return
 		}
-		if data, ok := performGet(conn, tokens[1:len(tokens)], table); ok {
+		if data, ok := performGet(conn, tokens[1:len(tokens)]); ok {
 			logger.Println("sending", tokens[1], "data")
 			buffer.Reset()
 			buffer.WriteString(VALUE)
@@ -305,7 +303,7 @@ func ParseInput(conn net.Conn, msg string, ch chan []byte) {
 		if isValid(GETM, tokens, conn) != 0 {
 			return
 		}
-		if data, ok := performGetm(conn, tokens[1:len(tokens)], table); ok {
+		if data, ok := performGetm(conn, tokens[1:len(tokens)]); ok {
 			logger.Println("sending", tokens[1], "metadata")
 			buffer.Reset()
 			buffer.WriteString(VALUE)
@@ -334,7 +332,7 @@ func ParseInput(conn net.Conn, msg string, ch chan []byte) {
 		if isValid(CAS, tokens, conn) != 0 {
 			return
 		}
-		if ver, ok, r := performCas(conn, tokens[1:len(tokens)], table, ch); r {
+		if ver, ok, r := performCas(conn, tokens[1:len(tokens)], ch); r {
 			if r {
 				switch ok {
 				case 0:
@@ -365,7 +363,7 @@ func ParseInput(conn net.Conn, msg string, ch chan []byte) {
 		if isValid(DELETE, tokens, conn) != 0 {
 			return
 		}
-		if ok := performDelete(conn, tokens[1:len(tokens)], table); ok == 0 {
+		if ok := performDelete(conn, tokens[1:len(tokens)]); ok == 0 {
 			write(conn, DELETED)
 		} else {
 			write(conn, ERR_NOT_FOUND)
@@ -384,11 +382,11 @@ func ParseInput(conn net.Conn, msg string, ch chan []byte) {
  *return: version of inserted key (if successful, 0 otherwise), success or failure, whether to send reply to client
  */
 func performSet(conn net.Conn, tokens []string, ch chan []byte) (uint64, bool, bool) {
-	k := tokens[0]
+	//-k := tokens[0]
 	//expiry time offset
-	e, _ := strconv.ParseUint(tokens[1], 10, 64)
+	//-e, _ := strconv.ParseUint(tokens[1], 10, 64)
 	//numbytes
-	n, _ := strconv.ParseUint(tokens[2], 10, 64)
+	//-n, _ := strconv.ParseUint(tokens[2], 10, 64)
 	r := true
 
 	if len(tokens) == 4 && tokens[3] == NOREPLY {
@@ -397,32 +395,33 @@ func performSet(conn net.Conn, tokens []string, ch chan []byte) (uint64, bool, b
 
 	logger.Println(r)
 
-	if v, err := readValue(ch, n); err {
-		write(conn, ERR_CMD_ERR)
-		return 0, false, r
-	} else {
-		defer table.Unlock()
-		table.Lock()
-		//critical section start
-		var val *Data
-		if _, ok := table.dictionary[k]; ok {
-			val = table.dictionary[k]
-		} else {
-			val = new(Data)
-			table.dictionary[k] = val
-		}
-		val.numBytes = n
-		val.version++
-		if e == 0 {
-			val.isPerpetual = true
-			val.expTime = 0
-		} else {
-			val.isPerpetual = false
-			val.expTime = e + uint64(time.Now().Unix())
-		}
-		val.value = v
-		return val.version, true, r
-	}
+	//if v, err := readValue(ch, n); err {
+	//	write(conn, ERR_CMD_ERR)
+	//	return 0, false, r
+	//} else {
+	//	defer table.Unlock()
+	//	table.Lock()
+	//	//critical section start
+	//	var val *Data
+	//	if _, ok := table.dictionary[k]; ok {
+	//		val = table.dictionary[k]
+	//	} else {
+	//		val = new(Data)
+	//		table.dictionary[k] = val
+	//	}
+	//	val.numBytes = n
+	//	val.version++
+	//	if e == 0 {
+	//		val.isPerpetual = true
+	//		val.expTime = 0
+	//	} else {
+	//		val.isPerpetual = false
+	//		val.expTime = e + uint64(time.Now().Unix())
+	//	}
+	//	val.value = v
+	//	return val.version, true, r
+	//}
+	return 2, true, true
 }
 
 /*Delegate function reponsible for activities related to the GET command sent by the client.
@@ -496,40 +495,41 @@ func performCas(conn net.Conn, tokens []string, ch chan []byte) (uint64, int, bo
 	}
 
 	//read value
-	if v, err := readValue(ch, n); err {
-		return 0, 1, r
-	} else {
-		defer table.Unlock()
-		table.Lock()
-		if val, ok := table.dictionary[k]; ok {
-			if val.version == ve {
-				if val.isPerpetual || val.expTime >= uint64(time.Now().Unix()) {
-					//if expiry time is zero, key should not be deleted
-					if e == 0 {
-						val.isPerpetual = true
-						val.expTime = 0
-					} else {
-						val.isPerpetual = false
-						val.expTime = e + uint64(time.Now().Unix())
-					}
-					val.numBytes = n
-					val.version++
-					val.value = v
-					//key found and changed
-					return val.version, 0, r
-				} else {
-					logger.Println("expired key found!")
-					//version found but key expired, can delete key safely and tell client that it does not exist
-					delete(table.dictionary, k)
-					return 0, 3, r
-				}
-			}
-			//version mismatch
-			return 0, 2, r
-		}
-		//key not found
-		return 0, 3, r
-	}
+	//if v, err := readValue(ch, n); err {
+	//	return 0, 1, r
+	//} else {
+	//	defer table.Unlock()
+	//	table.Lock()
+	//	if val, ok := table.dictionary[k]; ok {
+	//		if val.version == ve {
+	//			if val.isPerpetual || val.expTime >= uint64(time.Now().Unix()) {
+	//				//if expiry time is zero, key should not be deleted
+	//				if e == 0 {
+	//					val.isPerpetual = true
+	//					val.expTime = 0
+	//				} else {
+	//					val.isPerpetual = false
+	//					val.expTime = e + uint64(time.Now().Unix())
+	//				}
+	//				val.numBytes = n
+	//				val.version++
+	//				val.value = v
+	//				//key found and changed
+	//				return val.version, 0, r
+	//			} else {
+	//				logger.Println("expired key found!")
+	//				//version found but key expired, can delete key safely and tell client that it does not exist
+	//				delete(table.dictionary, k)
+	//				return 0, 3, r
+	//			}
+	//		}
+	//		//version mismatch
+	//		return 0, 2, r
+	//	}
+	//	//key not found
+	//	return 0, 3, r
+	//}
+	return 1, 1, true
 }
 
 /*Delegate function reponsible for activities related to the DELETE command sent by the client.
@@ -613,11 +613,12 @@ func InitKVStore() {
 	table = &KeyValueStore{dictionary: make(map[string]*Data)}
 }
 
-func IsCasOrSet(msg string) bool {
-	tokens := strings.Fields(msg)
-	if len(tokens) >= 1 {
-		return tokens[0] == SET || tokens[0] == CAS
-	}
+func IsCas(msg string) bool {
+	return msg == CAS
+}
+
+func IsSet(msg string) bool {
+	return msg == SET
 }
 
 //server will not call this, we'll call it from test cases to clear the map

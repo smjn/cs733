@@ -2,23 +2,23 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/gob"
-	"fmt"
 )
 
 type Command struct {
-	cmd []byte
-	val []byte
+	Cmd []byte
+	Val []byte
 }
 
 func (d *Command) GobEncode() ([]byte, error) {
 	w := new(bytes.Buffer)
 	encoder := gob.NewEncoder(w)
-	err := encoder.Encode(d.cmd)
+	err := encoder.Encode(d.Cmd)
 	if err != nil {
 		return nil, err
 	}
-	err = encoder.Encode(d.val)
+	err = encoder.Encode(d.Val)
 	if err != nil {
 		return nil, err
 	}
@@ -28,9 +28,9 @@ func (d *Command) GobEncode() ([]byte, error) {
 func (d *Command) GobDecode(buf []byte) error {
 	r := bytes.NewBuffer(buf)
 	decoder := gob.NewDecoder(r)
-	err := decoder.Decode(&d.cmd)
+	err := decoder.Decode(&d.Cmd)
 	if err != nil {
 		return err
 	}
-	return decoder.Decode(&d.val)
+	return decoder.Decode(&d.Val)
 }

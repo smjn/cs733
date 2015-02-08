@@ -1,13 +1,8 @@
 package raft
 
 import (
-	"fmt"
-	"io/ioutil"
 	"log"
-	"net"
 	"net/rpc"
-	"os"
-	"reflect"
 	"strconv"
 	"time"
 )
@@ -200,82 +195,4 @@ func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
 
 func (e ErrRedirect) Error() string {
 	return "Redirect to server " + strconv.Itoa(0)
-}
-
-//func start_rpc(this_server *ServerConfig) {
-//	//rpc.Register()
-//}
-
-func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *Reply) error {
-	reply.X = args.X
-	return nil
-}
-
-func initInterServerCommunication(this_server *ServerConfig) {
-	appendRpc := new(AppendEntries)
-	rpc.Register(appendRpc)
-	listener, e := net.Listen("tcp", ":"+strconv.Itoa(this_server.LogPort))
-	if e != nil {
-		Info.Fatal("listen error:", e)
-	}
-	for {
-		if conn, err := listener.Accept(); err != nil {
-			Info.Fatal("accept error: " + err.Error())
-		} else {
-			Info.Printf("new connection established\n")
-			go rpc.ServeConn(conn)
-		}
-	}
-}
-
-// Initialize Logger
-func initLogger(serverId int) {
-	// Logger Initializaion
-	if !DEBUG {
-		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	} else {
-
-		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	}
-
-	Info.Println("Initialized server")
-}
-
-func initClientCommunication(server) {
-	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.ClientPort))
-	if e != nil {
-		Info.Fatal("client listen error:", e)
-	}
-	for {
-		if conn, err := listener.Accept(); err != nil {
-			Info.Fatal("client accept error: " + err.Error())
-		} else {
-			Info.Printf("client new connection established\n")
-			go handleClient(conn)
-		}
-	}
-}
-
-func main() {
-	sid, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		Info.Println("argument ", os.Args[1], "is not string")
-	}
-
-	initLogger(sid)
-	Info.Println("Start")
-
-	server, _ := NewServerConfig(sid)
-
-	serverCount, err2 := strconv.Atoi((os.Args[2]))
-	if err2 != nil {
-		Info.Println("argument ", os.Args[2], "is not string")
-	}
-	cluster_config, _ := NewClusterConfig(serverCount)
-
-	initClientCommunication(server)
-	initInterServerCommunication(server)
-
-	var dummy string
-	fmt.Scanln(&dummy)
 }

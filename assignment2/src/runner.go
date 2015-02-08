@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	//"log"
 	"os/exec"
 	"strconv"
-	//"syscall"
 )
 
 //constant values used
@@ -15,7 +13,7 @@ const (
 )
 
 func TestServersCommunic(i int) {
-	cmd := exec.Command("go", "run", "replic_kvstore.go", strconv.Itoa(i+1), strconv.Itoa(NUM_SERVERS))
+	cmd := exec.Command("go", "run", "server.go", strconv.Itoa(i+1), strconv.Itoa(NUM_SERVERS))
 	f, err := os.OpenFile(strconv.Itoa(i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		fmt.Println("error opening file: %v", err)
@@ -25,11 +23,6 @@ func TestServersCommunic(i int) {
 	cmd.Stdout = f
 	cmd.Stderr = f
 	cmd.Run()
-	/*if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println(string(out))*/
 }
 
 func main() {

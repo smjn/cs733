@@ -2,18 +2,15 @@
 package main
 
 import (
-	"cs733/assignment2/handler"
-	"cs733/assignment2/kvstore"
-	"cs733/assignment2/raft"
+	"connhandler"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/rpc"
 	"os"
-	"reflect"
+	"raft"
 	"strconv"
-	"time"
 )
 
 // Logger
@@ -21,6 +18,8 @@ var Info *log.Logger
 
 // Flag for enabling/disabling logging functionality
 var DEBUG = true
+
+type AppendEntries struct{}
 
 type Args struct {
 	X int
@@ -30,17 +29,15 @@ type Reply struct {
 	X int
 }
 
-type AppendEntries struct{}
-
 func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *Reply) error {
 	reply.X = args.X
 	return nil
 }
 
-func initInterServerCommunication(server *raft.ServerConfig, rft *raft.SharedLog) {
+func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft) {
 	appendRpc := new(AppendEntries)
 	rpc.Register(appendRpc)
-	listener, e := net.Listen("tcp", ":"+strconv.Itoa(this_server.LogPort))
+	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.LogPort))
 	if e != nil {
 		Info.Fatal("listen error:", e)
 	}
@@ -67,7 +64,7 @@ func initLogger(serverId int) {
 	Info.Println("Initialized server")
 }
 
-func initClientCommunication(server *raft.ServerConfig, rft *raft.SharedLog) {
+func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft) {
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.ClientPort))
 	if e != nil {
 		Info.Fatal("client listen error:", e)
@@ -77,7 +74,7 @@ func initClientCommunication(server *raft.ServerConfig, rft *raft.SharedLog) {
 			Info.Fatal("client accept error: " + err.Error())
 		} else {
 			Info.Printf("client new connection established\n")
-			go handler.HandleClient(conn, rft)
+			go connhandler.HandleClient(conn, rft)
 		}
 	}
 }
@@ -100,7 +97,7 @@ func main() {
 	clusterConfig, _ := raft.NewClusterConfig(serverCount)
 	commitCh := make(chan raft.LogEntry)
 
-	rft := raft.NewRaft(clusterConfig, sid, commitCh)
+	rft, _ := raft.NewRaft(clusterConfig, sid, commitCh)
 
 	initClientCommunication(server, rft)
 	initInterServerCommunication(server, rft)
