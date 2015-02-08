@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/rpc"
@@ -14,6 +15,12 @@ import (
 const (
 	CLIENT_PORT = 9000
 )
+
+// Logger
+var Info *log.Logger
+
+// Flag for enabling/disabling logging functionality
+var DEBUG = true
 
 type Lsn uint64 //Log sequence number, unique for all time.
 
@@ -131,7 +138,7 @@ func (raft *Raft) Append(data []byte) (LogEntry, error) {
 		go func(ackChan chan int) {
 			client, err := rpc.Dial("tcp", server.Hostname+":"+strconv.Itoa(server.LogPort))
 			if err != nil {
-				log.Fatal("Dialing:", err)
+				Info.Fatal("Dialing:", err)
 			}
 			reply := new(Reply)
 			args := &Args{7}
@@ -186,34 +193,56 @@ func initializeInterServerCommunication(this_server *ServerConfig) {
 	rpc.Register(appendRpc)
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(this_server.LogPort))
 	if e != nil {
-		log.Fatal("listen error:", e)
+		Info.Fatal("listen error:", e)
 	}
 	for {
 		if conn, err := listener.Accept(); err != nil {
-			log.Fatal("accept error: " + err.Error())
+			Info.Fatal("accept error: " + err.Error())
 		} else {
-			log.Printf("new connection established\n")
+			Info.Printf("new connection established\n")
 			go rpc.ServeConn(conn)
 		}
 	}
 }
 
+// Initialize Logger
+func initializeLogger(serverId int) {
+	// Logger Initializaion
+	if !DEBUG {
+		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	} else {
+		f, err := os.OpenFile(strconv.Itoa(serverId+CLIENT_PORT), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			fmt.Println("error opening file: %v", err)
+		}
+
+		defer f.Close()
+		Info = log.New(f, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	}
+
+	Info.Println("Initialized server")
+}
+
 func main() {
-	log.Println("Start")
 	server_id, err := strconv.Atoi(os.Args[1])
 	if err != nil {
-		fmt.Println("argument ", os.Args[1], "is not string")
+		Info.Println("argument ", os.Args[1], "is not string")
 	}
+
+	initializeLogger(server_id)
+	Info.Println("Start")
+
 	this_server, _ := NewServerConfig(server_id)
 
 	num_servers, err2 := strconv.Atoi((os.Args[2]))
 	if err2 != nil {
-		fmt.Println("argument ", os.Args[2], "is not string")
+		Info.Println("argument ", os.Args[2], "is not string")
 	}
 	cluster_config, _ := NewClusterConfig(num_servers)
 
-	fmt.Println(reflect.TypeOf(this_server))
-	fmt.Println(reflect.TypeOf(cluster_config))
+	Info.Println(reflect.TypeOf(this_server))
+	Info.Println(reflect.TypeOf(cluster_config))
+
 	initializeInterServerCommunication(this_server)
 
 	var dummy_input string
