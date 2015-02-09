@@ -72,10 +72,17 @@ type Reply struct {
 
 type AppendEntries struct{}
 
+var cluster_config *ClusterConfig
+
+func GetClusterConfig() *ClusterConfig {
+	return cluster_config
+}
+
 func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, logger *log.Logger) (*Raft, error) {
 	rft := new(Raft)
 	rft.commitCh = commitCh
 	rft.clusterConfig = config
+	cluster_config = config
 	rft.id = thisServerId
 	Info = logger
 	lsn = 0
@@ -84,7 +91,6 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, lo
 
 func NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
 	entry := new(LogEntryData)
-
 	entry.Id = lsn
 	entry.Data = data
 	entry.conn = conn
