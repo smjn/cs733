@@ -3,7 +3,6 @@ package main
 
 import (
 	"connhandler"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -34,7 +33,7 @@ func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *Reply) error {
 	return nil
 }
 
-func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft) {
+func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
 	appendRpc := new(AppendEntries)
 	rpc.Register(appendRpc)
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.LogPort))
@@ -49,6 +48,7 @@ func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft) {
 			go rpc.ServeConn(conn)
 		}
 	}
+	ch <- true
 }
 
 // Initialize Logger
@@ -64,7 +64,7 @@ func initLogger(serverId int) {
 	Info.Println("Initialized server")
 }
 
-func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft) {
+func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.ClientPort))
 	if e != nil {
 		Info.Fatal("client listen error:", e)
@@ -77,10 +77,13 @@ func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft) {
 			go connhandler.HandleClient(conn, rft)
 		}
 	}
+	ch <- true
 }
 
 func main() {
 	sid, err := strconv.Atoi(os.Args[1])
+	ch1 := make(chan bool)
+	ch2 := make(chan bool)
 	if err != nil {
 		Info.Println("argument ", os.Args[1], "is not string")
 	}
@@ -98,10 +101,13 @@ func main() {
 	commitCh := make(chan raft.LogEntry)
 
 	rft, _ := raft.NewRaft(clusterConfig, sid, commitCh)
+	raft.InitKVStore()
 
-	initClientCommunication(server, rft)
-	initInterServerCommunication(server, rft)
+	go raft.MonitorCommitChannel(commitCh)
+	go initClientCommunication(server, rft, ch1)
+	go initInterServerCommunication(server, rft, ch2)
 
-	var dummy string
-	fmt.Scanln(&dummy)
+	for <-ch1 && <-ch2 {
+
+	}
 }

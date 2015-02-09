@@ -1,4 +1,4 @@
-package kvstore
+package raft
 
 import (
 	"bytes"
@@ -61,50 +61,6 @@ var logger *log.Logger
 //cache
 var table *KeyValueStore
 
-/*Function to start the server and accept connections.
- *arguments: none
- *return: none
- */
-//func startServer() {
-//	logger.Println("Server started")
-//	listener, err := net.Listen("tcp", ":5000")
-//	if err != nil {
-//		logger.Println("Could not start server!")
-//	}
-
-//	//initialize key value store
-//	table = &KeyValueStore{dictionary: make(map[string]*Data)}
-
-//	//infinite loop
-//	for {
-//		conn, err := listener.Accept()
-//		if err != nil {
-//			logger.Println(err)
-//			continue
-//		}
-
-//		go handleClient(conn) //client connection handler
-//	}
-//}
-
-/*Function to read data from the connection and put it on the channel so it could be read in a systematic fashion.
- *arguments: channel shared between this go routine and other functions performing actions based on the commands given, client connection
- *return: none
- */
-//func myRead(ch chan []byte, conn net.Conn) {
-//	scanner := bufio.NewScanner(conn)
-//	scanner.Split(CustomSplitter)
-//	for {
-//		if ok := scanner.Scan(); !ok {
-//			break
-//		} else {
-//			temp := scanner.Bytes()
-//			ch <- temp
-//			logger.Println(temp, "$$")
-//		}
-//	}
-//}
-
 /*Simple write function to send information to the client
  *arguments: client connection, msg to send to the client
  *return: none
@@ -112,29 +68,8 @@ var table *KeyValueStore
 func write(conn net.Conn, msg string) {
 	buf := []byte(msg)
 	buf = append(buf, []byte(CRLF)...)
-	//logger.Println(buf, len(buf))
 	conn.Write(buf)
 }
-
-/*After initial establishment of the connection with the client, this go routine handles further interaction
- *arguments: client connection
- *return: none
- */
-//func handleClient(conn net.Conn) {
-//	defer conn.Close()
-//	//channel for every connection for every client
-//	ch := make(chan []byte)
-//	go myRead(ch, conn)
-
-//	for {
-//		msg := <-ch
-//		logger.Println("Channel: ", msg, string(msg))
-//		if len(msg) == 0 {
-//			continue
-//		}
-//		parseInput(conn, string(msg), table, ch)
-//	}
-//}
 
 /*Basic validations for various commands
  *arguments: command to check against, other parmameters sent with the command (excluding the value), client connection
@@ -568,31 +503,6 @@ func debug() {
 	logger.Println("----end debug----")
 }
 
-/*Entry point of this program. Initializes the start of ther server and sets up the logger.
- *arguments: none
- *return: none
- */
-//func main() {
-//	toLog := ""
-//	if len(os.Args) > 1 {
-//		toLog = os.Args[1]
-//	}
-
-//	//toLog = "s"
-//	if toLog != "" {
-//		logf, _ := os.OpenFile("serverlog.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-//		defer logf.Close()
-//		logger = log.New(logf, "SERVER: ", log.Ltime|log.Lshortfile)
-//		//logger = log.New(os.Stdout, "SERVER: ", log.Ltime|log.Lshortfile)
-//	} else {
-//		logger = log.New(ioutil.Discard, "SERVER: ", log.Ldate)
-//	}
-
-//	go startServer()
-//	var input string
-//	fmt.Scanln(&input)
-//}
-
 func InitKVStore() {
 	toLog := ""
 	if len(os.Args) > 1 {
@@ -613,12 +523,10 @@ func InitKVStore() {
 	table = &KeyValueStore{dictionary: make(map[string]*Data)}
 }
 
-func IsCas(msg string) bool {
-	return msg == CAS
-}
-
-func IsSet(msg string) bool {
-	return msg == SET
+func MonitorCommitChannel(ch chan LogEntry) {
+	for {
+		temp := <-ch
+	}
 }
 
 //server will not call this, we'll call it from test cases to clear the map
