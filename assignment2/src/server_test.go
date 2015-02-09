@@ -81,15 +81,30 @@ func testConnectFollower(t *testing.T) {
 //noreply option is not more valid with set and cas
 //client should get command error from the server if it sends 'no reply' option
 func testNoReply(t *testing.T) {
-	var noreply_cases = []testpair{
+	var noreply_cases = []Testpair{
 		{[]byte("set mykey1 100 3 noreply\r\n"), []byte("ERRCMDERR\r\n")},
 		{[]byte("cas mykey1 0 1 6 noreply\r\n"), []byte("ERRCMDERR\r\n")},
 	}
-
+	server_port := raft.CLIENT_PORT + 1
 	conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
 	if err != nil {
 		t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 	} else {
+		time.Sleep(time.Millisecond)
+		for _, pair := range noreply_cases {
+			conn.Write(pair.to_server)
+			buffer := make([]byte, 1024)
+			conn.Read(buffer)
+			n := bytes.Index(buffer, []byte{0})
+			if !bytes.Equal(buffer[:n], pair.from_server) {
+				t.Error(
+					"For", pair.to_server, string(pair.to_server),
+					"expected", pair.from_server, string(pair.from_server),
+					"got", buffer[:n], string(buffer[:n]),
+				)
+			}
+		}
+		conn.Close()
 		time.Sleep(time.Millisecond)
 	}
 }
