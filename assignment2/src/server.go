@@ -76,10 +76,10 @@ func (t *AppendEntries) AppendEntriesRPC(args *raft.LogEntryData, reply *Reply) 
 //arguments: pointer to argument struct (has LogEntry), pointer to reply struct
 //returns: error
 //receiver: pointer to AppendEntries
-func (t *AppendEntries) CommitRPC(args *raft.LogEntryData, reply *Reply) error {
+func (t *AppendEntries) CommitRPC(args *raft.CommitData, reply *Reply) error {
 	Info.Println("Commit RPC invoked")
-	rft.LogArray[(*args).GetLsn()].SetCommitted(true)
-	rft.AddToChannel(args)
+	rft.LogArray[(*args).Id].SetCommitted(true)
+	rft.AddToChannel(rft.LogArray[(*args).Id])
 	reply.X = 1
 	return nil
 }

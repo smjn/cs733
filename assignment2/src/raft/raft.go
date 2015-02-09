@@ -74,6 +74,11 @@ type LogEntryData struct {
 	conn      net.Conn // Connection for communicating with client
 }
 
+// Structure for calling commit RPC
+type CommitData struct {
+	Id uint64
+}
+
 // Structure used for replying to the RPC calls
 type Reply struct {
 	X int
@@ -139,6 +144,13 @@ func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh c
 				rft.LogArray[log_entry.(*LogEntryData).Id].Committed = true
 				//Info.Println(rft.LogArray)
 				rft.commitCh <- log_entry
+
+				temp := new(CommitData)
+				temp.Id = log_entry.(*LogEntryData).Id
+				for _, server := range rft.clusterConfig.Servers[1:] {
+					doCommitRPCCall(ackChan, server.Hostname, server.LogPort, temp)
+				}
+
 				majCh <- true
 				err = true
 				break
@@ -173,6 +185,20 @@ func (entry *LogEntryData) GetCommitted() bool {
 // Sets the committed status
 func (entry *LogEntryData) SetCommitted(committed bool) {
 	entry.Committed = committed
+}
+
+// Call CommitRPC to inform the followers of newly committed log entry
+func doCommitRPCCall(hostname string, logPort int, temp *CommitData) {
+	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
+	if err != nil {
+		Info.Fatal("Dialing:", err)
+	}
+	reply := new(Reply)
+	args := temp
+	Info.Println("Calling Commit RPC", logPort)
+	commitCall := client.Go("AppendEntries.CommitRPC", args, reply, nil) //let go allocate done channel
+	commitCall = <-commitCall.Done
+	Info.Println("Reply", commitCall, reply.X)
 }
 
 //make rpc call to followers
