@@ -103,7 +103,7 @@ func main() {
 	commitCh := make(chan raft.LogEntry)
 
 	rft, _ := raft.NewRaft(clusterConfig, sid, commitCh)
-	raft.InitKVStore()
+	raft.InitKVStore(Info)
 
 	go raft.MonitorCommitChannel(commitCh) //for kvstore
 	go initClientCommunication(server, rft, ch1)
