@@ -15,9 +15,6 @@ import (
 // Logger
 var Info *log.Logger
 
-// Flag for enabling/disabling logging functionality
-var DEBUG = true
-
 var rft *raft.Raft
 
 type AppendEntries struct{}
@@ -60,12 +57,11 @@ func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch 
 }
 
 // Initialize Logger
-func initLogger(serverId int) {
+func initLogger(serverId int, toDebug bool) {
 	// Logger Initializaion
-	if !DEBUG {
+	if !toDebug {
 		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	} else {
-
 		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
 
@@ -96,7 +92,11 @@ func main() {
 		Info.Println("argument ", os.Args[1], "is not string")
 	}
 
-	initLogger(sid)
+	if len(os.Args) > 3 {
+		initLogger(sid, true)
+	} else {
+		initLogger(sid, false)
+	}
 	Info.Println("Starting")
 
 	serverCount, err2 := strconv.Atoi((os.Args[2]))
