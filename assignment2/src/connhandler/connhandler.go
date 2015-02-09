@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"log"
 	"net"
 	"raft"
 	"strconv"
@@ -116,7 +117,7 @@ func Write(conn net.Conn, msg string) {
 	conn.Write(buf)
 }
 
-func HandleClient(conn net.Conn, rft *raft.Raft) {
+func HandleClient(conn net.Conn, rft *raft.Raft, logger *log.Logger) {
 	defer conn.Close()
 	//channel for every connection for every client
 	ch := make(chan []byte)
@@ -125,6 +126,8 @@ func HandleClient(conn net.Conn, rft *raft.Raft) {
 	for {
 		command := new(utils.Command)
 		msg := <-ch
+		logger.Println("got:", msg)
+
 		if len(msg) == 0 {
 			continue
 		}
@@ -132,17 +135,19 @@ func HandleClient(conn net.Conn, rft *raft.Raft) {
 		flag := false
 		nr := uint64(0)
 		tokens := strings.Fields(string(msg))
-		if tokens[0] == "CAS" {
-			n, _ := strconv.ParseUint(tokens[3], 10, 64)
+		if tokens[0] == "cas" {
+			n, _ := strconv.ParseUint(tokens[4], 10, 64)
 			nr = n
 			flag = true
-		} else if tokens[0] == "SET" {
-			n, _ := strconv.ParseUint(tokens[2], 10, 64)
+		} else if tokens[0] == "set" {
+			n, _ := strconv.ParseUint(tokens[3], 10, 64)
 			nr = n
 			flag = true
 		}
 		if flag {
+			logger.Println("numbytes", nr)
 			if v, err := readValue(ch, nr); err {
+				logger.Println("error reading value")
 				Write(conn, "ERR_CMD_ERR")
 				continue
 			} else {
@@ -159,6 +164,10 @@ func HandleClient(conn net.Conn, rft *raft.Raft) {
 			//log.Fatal("encode error:", err)
 		}
 
-		rft.Append(buffer.Bytes(), conn)
+		if _, err := rft.Append(buffer.Bytes(), conn); err != nil {
+			Write(conn, "ERR_REDIRECT 127.0.0.1 "+strconv.Itoa(raft.CLIENT_PORT+1))
+			conn.Close()
+			break
+		}
 	}
 }

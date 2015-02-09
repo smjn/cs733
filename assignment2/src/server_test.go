@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -34,6 +35,9 @@ func TestAll(t *testing.T) {
 
 	//run client that tries connecting to the followers
 	testConnectFollower(t)
+
+	//test no reply
+	testNoReply(t)
 }
 
 //run servers
@@ -52,7 +56,7 @@ func testServersCommunic(i int, t *testing.T) {
 
 //on trying to connect with the followers the client should get redirect err from the followers
 func testConnectFollower(t *testing.T) {
-	for i := 2; i < NUM_SERVERS; i++ { //the followers start at second position
+	for i := 2; i <= NUM_SERVERS; i++ { //the followers start at second position
 		server_port := raft.CLIENT_PORT + i
 		conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
 		if err != nil {
@@ -60,7 +64,9 @@ func testConnectFollower(t *testing.T) {
 		} else {
 			time.Sleep(time.Millisecond)
 			sending := []byte("set mykey1 100 3\r\nlul\r\n")
-			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n" + "ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n")
+			port := strconv.Itoa(raft.CLIENT_PORT + 1)
+			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + port + "\r\n")
+
 			conn.Write(sending)
 			buffer := make([]byte, 1024)
 			conn.Read(buffer)

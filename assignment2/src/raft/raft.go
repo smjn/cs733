@@ -131,10 +131,6 @@ func (entry *LogEntryData) Committed() bool {
 	return entry.committed
 }
 
-func Test() {
-
-}
-
 //make raft implement the append function
 func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 	if rft.id != 1 {

@@ -74,7 +74,7 @@ func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan 
 			Info.Fatal("client accept error: " + err.Error())
 		} else {
 			Info.Printf("client new connection established\n")
-			go connhandler.HandleClient(conn, rft)
+			go connhandler.HandleClient(conn, rft, Info)
 		}
 	}
 	ch <- true
