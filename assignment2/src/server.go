@@ -18,14 +18,25 @@ var Info *log.Logger
 // Flag for enabling/disabling logging functionality
 var DEBUG = true
 
+var rft *raft.Raft
+
 type AppendEntries struct{}
 
 type Reply struct {
 	X int
 }
 
-func (t *AppendEntries) AppendEntriesRPC(args *raft.LogEntry, reply *Reply) error {
-	Info.Println("RPC invoked")
+func (t *AppendEntries) AppendEntriesRPC(args *raft.LogEntryData, reply *Reply) error {
+	Info.Println("Append Entries RPC invoked", (*args).GetLsn(), (*args).GetData(), (*args).GetCommitted())
+	rft.LogArray = append(rft.LogArray, raft.NewLogEntry((*args).GetData(), (*args).GetCommitted(), nil))
+
+	reply.X = 1
+	return nil
+}
+
+func (t *AppendEntries) CommitRPC(args *raft.LogEntry, reply *Reply) error {
+	Info.Println("Commit RPC invoked")
+	rft.LogArray[(*args).GetLsn()].SetCommitted(true)
 	reply.X = 1
 	return nil
 }
@@ -97,7 +108,7 @@ func main() {
 	clusterConfig, _ := raft.NewClusterConfig(serverCount)
 	commitCh := make(chan raft.LogEntry)
 
-	rft, _ := raft.NewRaft(clusterConfig, sid, commitCh)
+	rft, _ = raft.NewRaft(clusterConfig, sid, commitCh, Info)
 	raft.InitKVStore(Info)
 
 	go raft.MonitorCommitChannel(commitCh) //for kvstore

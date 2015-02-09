@@ -19,6 +19,8 @@ const (
 // Logger
 var Info *log.Logger
 
+var lsn Lsn
+
 // Flag for enabling/disabling logging functionality
 var DEBUG = true
 
@@ -43,28 +45,25 @@ type SharedLog interface {
 }
 
 type Raft struct {
-	log_array      []*LogEntryData
-	commitCh       chan LogEntry
-	cluster_config *ClusterConfig //cluster
-	id             int            //this server id
+	LogArray      []*LogEntryData
+	commitCh      chan LogEntry
+	clusterConfig *ClusterConfig //cluster
+	id            int            //this server id
 	sync.RWMutex
 }
 
 type LogEntry interface {
-	Lsn() Lsn
-	Data() []byte
-	Committed() bool
+	GetLsn() Lsn
+	GetData() []byte
+	GetCommitted() bool
+	SetCommitted(status bool)
 }
 
 type LogEntryData struct {
-	id        Lsn
-	data      []byte
-	committed bool
+	Id        Lsn
+	Data      []byte
+	Committed bool
 	conn      net.Conn
-}
-
-type Args struct {
-	X int
 }
 
 type Reply struct {
@@ -73,34 +72,31 @@ type Reply struct {
 
 type AppendEntries struct{}
 
-var cluster_config *ClusterConfig
-
-func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
+func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, logger *log.Logger) (*Raft, error) {
 	rft := new(Raft)
 	rft.commitCh = commitCh
-	rft.cluster_config = config
+	rft.clusterConfig = config
 	rft.id = thisServerId
+	Info = logger
+	lsn = 0
 	return rft, nil
 }
 
-func NewLogEntry(id Lsn, data []byte, committed bool, conn net.Conn) *LogEntryData {
+func NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
 	entry := new(LogEntryData)
 
-	entry.id = id
-	entry.data = data
+	entry.Id = lsn
+	entry.Data = data
 	entry.conn = conn
-	entry.committed = committed
+	entry.Committed = committed
+	lsn++
 	return entry
-}
-
-func SetCommitted(logEntry *LogEntryData, committed bool) {
-	logEntry.committed = committed
 }
 
 //goroutine that monitors channel to check if the majority of servers have replied
 func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh chan bool) {
 	acks_received := 0
-	num_servers := len(rft.cluster_config.Servers)
+	num_servers := len(rft.clusterConfig.Servers)
 	required_acks := num_servers / 2
 	up := make(chan bool, 1)
 	err := false
@@ -113,9 +109,12 @@ func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh c
 	for {
 		select {
 		case temp := <-ack_ch:
+			Info.Println("Ack Received:", temp)
 			acks_received += temp
 			if acks_received == required_acks {
-				rft.log_array[log_entry.(*LogEntryData).id].committed = true
+				Info.Println("Majority Achieved", log_entry.(*LogEntryData).Id)
+				rft.LogArray[log_entry.(*LogEntryData).Id].Committed = true
+				//Info.Println(rft.LogArray)
 				rft.commitCh <- log_entry
 				majCh <- true
 				err = true
@@ -123,6 +122,7 @@ func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh c
 			}
 
 		case <-up:
+			Info.Println("Error")
 			err = true
 			break
 		}
@@ -132,44 +132,56 @@ func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh c
 	}
 }
 
-//make LogEntryData implement the
-func (entry *LogEntryData) Lsn() Lsn {
-	return entry.id
+//make LogEntryData implement the LogEntry Interface
+func (entry *LogEntryData) GetLsn() Lsn {
+	return entry.Id
 }
 
-func (entry *LogEntryData) Data() []byte {
-	return entry.data
+func (entry *LogEntryData) GetData() []byte {
+	return entry.Data
 }
 
-func (entry *LogEntryData) Committed() bool {
-	return entry.committed
+func (entry *LogEntryData) GetCommitted() bool {
+	return entry.Committed
+}
+
+func (entry *LogEntryData) SetCommitted(committed bool) {
+	entry.Committed = committed
+}
+
+//make rpc call to followers
+func doRPCCall(ackChan chan int, hostname string, logPort int, temp *LogEntryData) {
+	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
+	if err != nil {
+		Info.Fatal("Dialing:", err)
+	}
+	reply := new(Reply)
+	args := temp
+	Info.Println("RPC Called", logPort)
+	appendCall := client.Go("AppendEntries.AppendEntriesRPC", args, reply, nil) //let go allocate done channel
+	appendCall = <-appendCall.Done
+	Info.Println("Reply", appendCall, reply.X)
+	ackChan <- reply.X
 }
 
 //make raft implement the append function
 func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
+	Info.Println("Append Called")
 	if rft.id != 1 {
 		return nil, ErrRedirect(1)
 	}
-	temp := NewLogEntry(1, data, false, conn)
+	defer rft.Unlock()
+	rft.Lock()
+	temp := NewLogEntry(data, false, conn)
 
-	rft.log_array = append(rft.log_array, temp)
+	rft.LogArray = append(rft.LogArray, temp)
 
 	ackChan := make(chan int)
 	majChan := make(chan bool)
 	go monitorAckChannel(rft, ackChan, temp, majChan)
 
-	for _, server := range cluster_config.Servers[1:] {
-		go func(ackChan chan int) {
-			client, err := rpc.Dial("tcp", server.Hostname+":"+strconv.Itoa(server.LogPort))
-			if err != nil {
-				Info.Fatal("Dialing:", err)
-			}
-			reply := new(Reply)
-			args := temp
-			appendCall := client.Go("AppendEntries.AppendEntriesRPC", args, reply, nil) //let go allocate done channel
-			appendCall = <-appendCall.Done
-			ackChan <- reply.X
-		}(ackChan)
+	for _, server := range rft.clusterConfig.Servers[1:] {
+		doRPCCall(ackChan, server.Hostname, server.LogPort, temp)
 	}
 
 	if <-majChan {

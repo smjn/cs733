@@ -31,13 +31,15 @@ func TestAll(t *testing.T) {
 		go testServersCommunic(i, t)
 	}
 	//wait for some time so that servers are ready
-	time.Sleep(time.Second)
+	time.Sleep(4 * time.Second)
 
 	//run client that tries connecting to the followers
 	testConnectFollower(t)
 
 	//test no reply
 	testNoReply(t)
+
+	testSet(t)
 }
 
 //run servers
@@ -104,7 +106,40 @@ func testNoReply(t *testing.T) {
 			buffer := make([]byte, 1024)
 			conn.Read(buffer)
 			n := bytes.Index(buffer, []byte{0})
-			fmt.Println(buffer)
+			//fmt.Println(buffer)
+			if !bytes.Equal(buffer[:n], pair.from_server) {
+				t.Error(
+					"For", pair.to_server, string(pair.to_server),
+					"expected", pair.from_server, string(pair.from_server),
+					"got", buffer[:n], string(buffer[:n]),
+				)
+			}
+		}
+		conn.Close()
+		//time.Sleep(time.Millisecond)
+	}
+}
+
+//noreply option is not more valid with set and cas
+//client should get command error from the server if it sends 'no reply' option
+func testSet(t *testing.T) {
+	var noreply_cases = []Testpair{
+		{[]byte("set mykey1 100 3\r\nadd\r\n"), []byte("OK 1\r\n")},
+	}
+
+	server_port := raft.CLIENT_PORT + 1
+
+	conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
+	if err != nil {
+		t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
+	} else {
+		//time.Sleep(time.Millisecond)
+		for _, pair := range noreply_cases {
+			conn.Write(pair.to_server)
+			buffer := make([]byte, 1024)
+			conn.Read(buffer)
+			n := bytes.Index(buffer, []byte{0})
+			//fmt.Println(buffer)
 			if !bytes.Equal(buffer[:n], pair.from_server) {
 				t.Error(
 					"For", pair.to_server, string(pair.to_server),
