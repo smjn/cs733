@@ -491,6 +491,7 @@ func InitKVStore(log *log.Logger) {
 
 	//initialize key value store
 	table = &KeyValueStore{dictionary: make(map[string]*Data)}
+	logger.Println("KVStore initialized")
 }
 
 //server will not call this, we'll call it from test cases to clear the map

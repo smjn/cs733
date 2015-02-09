@@ -26,7 +26,7 @@ type Testpair struct {
 //
 func TestAll(t *testing.T) {
 	//start the servers
-	for i := 0; i < NUM_SERVERS; i++ {
+	for i := 1; i <= NUM_SERVERS; i++ {
 		go testServersCommunic(i, t)
 	}
 	//wait for some time so that servers are ready
@@ -38,7 +38,7 @@ func TestAll(t *testing.T) {
 
 //run servers
 func testServersCommunic(i int, t *testing.T) {
-	cmd := exec.Command("go", "run", "server.go", strconv.Itoa(i+1), strconv.Itoa(NUM_SERVERS))
+	cmd := exec.Command("go", "run", "server.go", strconv.Itoa(i), strconv.Itoa(NUM_SERVERS))
 	f, err := os.OpenFile(strconv.Itoa(i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		t.Errorf("error opening file: %v", err)
@@ -53,14 +53,14 @@ func testServersCommunic(i int, t *testing.T) {
 //on trying to connect with the followers the client should get redirect err from the followers
 func testConnectFollower(t *testing.T) {
 	for i := 2; i < NUM_SERVERS; i++ { //the followers start at second position
-		server_port := raft.LOG_PORT + i
+		server_port := raft.CLIENT_PORT + i
 		conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
 		if err != nil {
 			t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 		} else {
 			time.Sleep(time.Millisecond)
 			sending := []byte("set mykey1 100 3\r\nlul\r\n")
-			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.LOG_PORT+1) + "\r\n" + "ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n")
+			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n" + "ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n")
 			conn.Write(sending)
 			buffer := make([]byte, 1024)
 			conn.Read(buffer)
@@ -82,11 +82,11 @@ func testConnectFollower(t *testing.T) {
 //client should get command error from the server if it sends 'no reply' option
 func testNoReply(t *testing.T) {
 	var noreply_cases = []Testpair{
-		{[]byte("set mykey1 100 3 noreply\r\n"), []byte("ERRCMDERR\r\n")},
-		{[]byte("cas mykey1 0 1 6 noreply\r\n"), []byte("ERRCMDERR\r\n")},
+		{[]byte("set mykey1 100 3 noreply\r\n"), []byte("ERR_CMD_ERR\r\n")},
+		{[]byte("cas mykey1 0 1 6 noreply\r\n"), []byte("ERR_CMD_ERR\r\n")},
 	}
 
-	server_port := raft.LOG_PORT + 1
+	server_port := raft.CLIENT_PORT + 1
 
 	conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
 	if err != nil {
