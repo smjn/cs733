@@ -158,6 +158,6 @@ func HandleClient(conn net.Conn, rft *raft.Raft) {
 			//log.Fatal("encode error:", err)
 		}
 
-		rft.Append(buffer.Bytes())
+		rft.Append(buffer.Bytes(), conn)
 	}
 }

@@ -525,7 +525,7 @@ func InitKVStore() {
 
 func MonitorCommitChannel(ch chan LogEntry) {
 	for {
-		temp := <-ch
+		//temp := <-ch
 	}
 }
 

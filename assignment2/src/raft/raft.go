@@ -2,6 +2,7 @@ package raft
 
 import (
 	"log"
+	"net"
 	"net/rpc"
 	"strconv"
 	"sync"
@@ -10,9 +11,9 @@ import (
 
 //constant values used
 const (
-	ClientPORT = 9000
-	LogPORT    = 20000
-	AckTIMEOUT = 5
+	CLIENT_PORT = 9000
+	LOG_PORT    = 20000
+	ACK_TIMEOUT = 5
 )
 
 // Logger

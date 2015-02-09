@@ -53,14 +53,14 @@ func testServersCommunic(i int, t *testing.T) {
 //on trying to connect with the followers the client should get redirect err from the followers
 func testConnectFollower(t *testing.T) {
 	for i := 2; i < NUM_SERVERS; i++ { //the followers start at second position
-		server_port := raft.LogPORT + i
+		server_port := raft.LOG_PORT + i
 		conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
 		if err != nil {
 			t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 		} else {
 			time.Sleep(time.Millisecond)
 			sending := []byte("set mykey1 100 3\r\nlul\r\n")
-			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.LogPORT+1) + "\r\n" + "ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n")
+			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.LOG_PORT+1) + "\r\n" + "ERR_REDIRECT 127.0.0.1 " + strconv.Itoa(raft.CLIENT_PORT+1) + "\r\n")
 			conn.Write(sending)
 			buffer := make([]byte, 1024)
 			conn.Read(buffer)
@@ -86,7 +86,7 @@ func testNoReply(t *testing.T) {
 		{[]byte("cas mykey1 0 1 6 noreply\r\n"), []byte("ERRCMDERR\r\n")},
 	}
 
-	server_port := raft.LogPORT + 1
+	server_port := raft.LOG_PORT + 1
 
 	conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
 	if err != nil {
