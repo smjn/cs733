@@ -79,6 +79,7 @@ func (t *AppendEntries) AppendEntriesRPC(args *raft.LogEntryData, reply *Reply) 
 func (t *AppendEntries) CommitRPC(args *raft.LogEntryData, reply *Reply) error {
 	Info.Println("Commit RPC invoked")
 	rft.LogArray[(*args).GetLsn()].SetCommitted(true)
+	rft.AddToChannel(args)
 	reply.X = 1
 	return nil
 }

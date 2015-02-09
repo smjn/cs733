@@ -46,7 +46,8 @@ type ClusterConfig struct {
 }
 
 type SharedLog interface {
-	Append(data []byte) (LogEntry, error)
+	Append(data []byte, conn net.Conn) (LogEntry, error)
+	AddToChannel(entry LogEntry)
 }
 
 // Raft information
@@ -214,6 +215,11 @@ func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 	}
 
 	return temp, nil
+}
+
+//AddToChannel
+func (rft *Raft) AddToChannel(entry LogEntry) {
+	rft.commitCh <- entry
 }
 
 func NewServerConfig(serverId int) (*ServerConfig, error) {
