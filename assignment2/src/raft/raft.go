@@ -22,9 +22,6 @@ var Info *log.Logger
 // Global variable for generating unique log sequence numbers
 var lsn Lsn
 
-// Flag for enabling/disabling logging functionality
-var DEBUG = true
-
 // See Log.Append. Implements Error interface.
 type ErrRedirect int
 
