@@ -120,24 +120,24 @@ func testNoReply(t *testing.T) {
 
 // Add some dummy entries in raft.ClusterConfig such that majority is not achieved
 // Expected: Time out should occur after 5 sec and log entry table should not be updated
-func CommandNotCommittedWithoutMajority() {
+func testCommandNotCommittedWithoutMajority() {
 
 }
 
 // Expected: Log entry table updated with the new entry
-func CommandCommittedWithMajority() {
+func testCommandCommittedWithMajority() {
 
 }
 
 // Multiple clients sending different requests
 // Expected: Log entry table updated
-func ConcurrentManyClientsToLeader() {
+func testConcurrentManyClientsToLeader() {
 
 }
 
 // Single client sending 100 requests one after another
 // Expected: Log entry table updated
-func ConcurrentClientManyRequestsToLeader() {
+func testConcurrentClientManyRequestsToLeader() {
 
 }
 
