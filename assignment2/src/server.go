@@ -15,29 +15,45 @@ import (
 // Logger
 var Info *log.Logger
 
+//global raft object for each server instance
 var rft *raft.Raft
 
+//Receiver fot RPC
 type AppendEntries struct{}
 
+//encapsulate the return value of RPC
 type Reply struct {
 	X int
 }
 
+//RPC for follower server. To let followers know that they can append their logs
+//arguments: pointer to argument struct (has LogEntryData), pointer to reply struct
+//returns: error
+//receiver: pointer to AppendEntries
 func (t *AppendEntries) AppendEntriesRPC(args *raft.LogEntryData, reply *Reply) error {
 	Info.Println("Append Entries RPC invoked", (*args).GetLsn(), (*args).GetData(), (*args).GetCommitted())
 	rft.LogArray = append(rft.LogArray, raft.NewLogEntry((*args).GetData(), (*args).GetCommitted(), nil))
-
 	reply.X = 1
 	return nil
 }
 
-func (t *AppendEntries) CommitRPC(args *raft.LogEntry, reply *Reply) error {
+//RPC for follower server. To let followers know that and entry can be committed.
+//arguments: pointer to argument struct (has LogEntry), pointer to reply struct
+//returns: error
+//receiver: pointer to AppendEntries
+func (t *AppendEntries) CommitRPC(args *raft.LogEntryData, reply *Reply) error {
 	Info.Println("Commit RPC invoked")
 	rft.LogArray[(*args).GetLsn()].SetCommitted(true)
 	reply.X = 1
 	return nil
 }
 
+//Initialize all the things necessary for start the server for inter raft communication.
+//The servers are running on ports 20000+serverId. {1..5}
+//arguments: pointer to current server config, pointer to raft object, a bool channel to set to true to let
+//the invoker know that the proc ended.
+//returns: none
+//receiver: none
 func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
 	appendRpc := new(AppendEntries)
 	rpc.Register(appendRpc)
@@ -56,7 +72,11 @@ func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch 
 	ch <- true
 }
 
-// Initialize Logger
+//Simple logger that is enabled or disabled according to the command line arguments. In test cases
+//it is redirected to a file per server {1..5}.
+//arguments: current server id, toggle enable/disable
+//return: none
+//receiver: none
 func initLogger(serverId int, toDebug bool) {
 	// Logger Initializaion
 	if !toDebug {
@@ -68,6 +88,12 @@ func initLogger(serverId int, toDebug bool) {
 	Info.Println("Initialized server.")
 }
 
+//Initialize all the things necessary for start the server for communication with client.
+//The servers are running on ports 9000+serverId {1..5}.
+//arguments: pointer to current server config, pointer to raft object, a bool channel to set to true to let
+//the invoker know that the proc ended.
+//returns: none
+//receiver: none
 func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.ClientPort))
 	if e != nil {
@@ -84,6 +110,7 @@ func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan 
 	ch <- true
 }
 
+//Entry point for application. Starts all major server go routines and then waits for ever
 func main() {
 	sid, err := strconv.Atoi(os.Args[1])
 	ch1 := make(chan bool)

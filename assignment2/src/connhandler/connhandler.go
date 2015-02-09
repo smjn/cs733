@@ -15,7 +15,7 @@ import (
 
 /*
  *Helper function to read value or cause timeout after READ_TIMEOUT seconds
- *parameters: channel to read data from, threshold number of bytes to read
+ *parameters: channel to read data from, threshold number of bytes to read, log pointer to write into
  *returns: the value string and error state
  */
 func readValue(ch chan []byte, n uint64, logger *log.Logger) ([]byte, bool) {
@@ -59,7 +59,8 @@ func readValue(ch chan []byte, n uint64, logger *log.Logger) ([]byte, bool) {
 	return v[:n], err
 }
 
-/*Copied from the bufio.Scanner (originally ScanLines). By default it splits by '\n' but now we want it to split by '\r\n'
+/*Copied from the bufio.Scanner (originally ScanLines).
+ *By default it splits by '\n' but now we want it to split by '\r\n'
  *arguments: data in bytes, is eof reached
  *return: next sequence of bytes, chunk of data found, err state
  */
@@ -92,7 +93,8 @@ func CustomSplitter(data []byte, atEOF bool) (advance int, token []byte, err err
 }
 
 /*Function to read data from the connection and put it on the channel so it could be read in a systematic fashion.
- *arguments: channel shared between this go routine and other functions performing actions based on the commands given, client connection
+ *arguments: channel shared between this go routine and other functions performing actions based on the commands given,
+ *client connection
  *return: none
  */
 func MyRead(ch chan []byte, conn net.Conn) {
@@ -118,6 +120,11 @@ func Write(conn net.Conn, msg string) {
 	conn.Write(buf)
 }
 
+/*Will be invoked as go routine by server to every client connection. Will take care of all communication with the
+ *client and the raft/kvstore
+ *arguments: connection to client, pointer to raft, pointer to logger
+ *return: none
+ */
 func HandleClient(conn net.Conn, rft *raft.Raft, logger *log.Logger) {
 	defer conn.Close()
 	//channel for every connection for every client
