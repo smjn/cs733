@@ -93,6 +93,10 @@ func NewLogEntry(id Lsn, data []byte, committed bool, conn net.Conn) *LogEntryDa
 	return entry
 }
 
+func SetCommitted(logEntry *LogEntryData, committed bool) {
+	logEntry.committed = committed
+}
+
 //goroutine that monitors channel to check if the majority of servers have replied
 func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh chan bool) {
 	acks_received := 0
