@@ -18,7 +18,7 @@ import (
  *parameters: channel to read data from, threshold number of bytes to read
  *returns: the value string and error state
  */
-func readValue(ch chan []byte, n uint64) ([]byte, bool) {
+func readValue(ch chan []byte, n uint64, logger *log.Logger) ([]byte, bool) {
 	//now we need to read the value which should have been sent
 	valReadLength := uint64(0)
 	var v []byte
@@ -48,6 +48,7 @@ func readValue(ch chan []byte, n uint64) ([]byte, bool) {
 
 		//will be true if timeout occurs
 		if err {
+			logger.Println("Timeout")
 			break
 		}
 	}
@@ -126,7 +127,7 @@ func HandleClient(conn net.Conn, rft *raft.Raft, logger *log.Logger) {
 	for {
 		command := new(utils.Command)
 		msg := <-ch
-		logger.Println("got:", msg)
+		logger.Println("got:", msg, string(msg))
 
 		if len(msg) == 0 {
 			continue
@@ -146,7 +147,7 @@ func HandleClient(conn net.Conn, rft *raft.Raft, logger *log.Logger) {
 		}
 		if flag {
 			logger.Println("numbytes", nr)
-			if v, err := readValue(ch, nr); err {
+			if v, err := readValue(ch, nr, logger); err {
 				logger.Println("error reading value")
 				Write(conn, "ERR_CMD_ERR")
 				continue

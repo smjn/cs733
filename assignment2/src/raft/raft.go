@@ -154,7 +154,7 @@ func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 				Info.Fatal("Dialing:", err)
 			}
 			reply := new(Reply)
-			args := &Args{7}
+			args := temp
 			appendCall := client.Go("AppendEntries.AppendEntriesRPC", args, reply, nil) //let go allocate done channel
 			appendCall = <-appendCall.Done
 			ackChan <- reply.X

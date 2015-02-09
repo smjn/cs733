@@ -20,16 +20,13 @@ var DEBUG = true
 
 type AppendEntries struct{}
 
-type Args struct {
-	X int
-}
-
 type Reply struct {
 	X int
 }
 
-func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *Reply) error {
-	reply.X = args.X
+func (t *AppendEntries) AppendEntriesRPC(args *raft.LogEntry, reply *Reply) error {
+	Info.Println("RPC invoked")
+	reply.X = 1
 	return nil
 }
 
