@@ -144,6 +144,7 @@ func HandleClient(conn net.Conn, rft *raft.Raft) {
 		if flag {
 			if v, err := readValue(ch, nr); err {
 				Write(conn, "ERR_CMD_ERR")
+				continue
 			} else {
 				command.Val = v
 				//command.isVal = true
