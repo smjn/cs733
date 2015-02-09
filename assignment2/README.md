@@ -1,4 +1,4 @@
-# RAFT layer below the KV store
+# RAFT layer below the KV store (replication and redirection)
 
 Assignment 2 of course Engineering a Cloud, CS733, IIT Bombay
 
