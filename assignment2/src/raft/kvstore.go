@@ -2,6 +2,7 @@ package raft
 
 import (
 	"bytes"
+	"encoding/gob"
 	"log"
 	"net"
 	"strconv"
@@ -193,10 +194,14 @@ func MonitorCommitChannel(ch chan LogEntry) {
 		temp := <-ch
 		conn := temp.(*LogEntryData).conn
 		cmd := new(utils.Command)
-		if err := cmd.GobDecode(temp.Data()); err != nil {
-			log.Fatal("Error decoding command!")
+
+		buffer := bytes.NewBuffer(temp.GetData())
+		dec := gob.NewDecoder(buffer)
+		if err := dec.Decode(cmd); err != nil {
+			log.Fatal("Error decoding command!", err)
 		}
 		ParseInput(conn, cmd)
+		//Debug()
 	}
 }
 
@@ -498,7 +503,7 @@ func performDelete(conn net.Conn, tokens []string) int {
  *arguments: none
  *return: none
  */
-func debug() {
+func Debug() {
 	logger.Println("----start debug----")
 	for key, val := range (*table).dictionary {
 		logger.Println(key, val)

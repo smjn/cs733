@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	//"fmt"
 	"net"
 	"net/rpc"
 	"os"
@@ -39,6 +39,8 @@ func TestAll(t *testing.T) {
 
 	//test no reply
 	testNoReply(t)
+
+	testSet(t)
 }
 
 //run servers
@@ -63,7 +65,7 @@ func testConnectFollower(t *testing.T) {
 		if err != nil {
 			t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 		} else {
-			time.Sleep(time.Millisecond)
+			//time.Sleep(time.Millisecond)
 			sending := []byte("set mykey1 100 3\r\nlul\r\n")
 			port := strconv.Itoa(raft.CLIENT_PORT + 1)
 			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + port + "\r\n")
@@ -80,7 +82,7 @@ func testConnectFollower(t *testing.T) {
 				)
 			}
 			conn.Close()
-			time.Sleep(time.Millisecond)
+			//time.Sleep(time.Millisecond)
 		}
 	}
 }
@@ -99,13 +101,13 @@ func testNoReply(t *testing.T) {
 	if err != nil {
 		t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 	} else {
-		time.Sleep(time.Millisecond)
+		//time.Sleep(time.Millisecond)
 		for _, pair := range noreply_cases {
 			conn.Write(pair.to_server)
 			buffer := make([]byte, 1024)
 			conn.Read(buffer)
 			n := bytes.Index(buffer, []byte{0})
-			fmt.Println(buffer)
+			//fmt.Println(buffer)
 			if !bytes.Equal(buffer[:n], pair.from_server) {
 				t.Error(
 					"For", pair.to_server, string(pair.to_server),
@@ -115,7 +117,40 @@ func testNoReply(t *testing.T) {
 			}
 		}
 		conn.Close()
-		time.Sleep(time.Millisecond)
+		//time.Sleep(time.Millisecond)
+	}
+}
+
+//noreply option is not more valid with set and cas
+//client should get command error from the server if it sends 'no reply' option
+func testSet(t *testing.T) {
+	var noreply_cases = []Testpair{
+		{[]byte("set mykey1 100 3\r\nadd\r\n"), []byte("OK 1\r\n")},
+	}
+
+	server_port := raft.CLIENT_PORT + 1
+
+	conn, err := net.Dial("tcp", ":"+strconv.Itoa(server_port))
+	if err != nil {
+		t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
+	} else {
+		//time.Sleep(time.Millisecond)
+		for _, pair := range noreply_cases {
+			conn.Write(pair.to_server)
+			buffer := make([]byte, 1024)
+			conn.Read(buffer)
+			n := bytes.Index(buffer, []byte{0})
+			//fmt.Println(buffer)
+			if !bytes.Equal(buffer[:n], pair.from_server) {
+				t.Error(
+					"For", pair.to_server, string(pair.to_server),
+					"expected", pair.from_server, string(pair.from_server),
+					"got", buffer[:n], string(buffer[:n]),
+				)
+			}
+		}
+		conn.Close()
+		//time.Sleep(time.Millisecond)
 	}
 }
 
@@ -190,24 +225,24 @@ func monitorPresentChannel(presentChan chan bool, t *testing.T) {
 
 // Add some dummy entries in raft.ClusterConfig such that majority is not achieved
 // Expected: Time out should occur after 5 sec and log entry table should not be updated
-func CommandNotCommittedWithoutMajority() {
+func testCommandNotCommittedWithoutMajority() {
 
 }
 
 // Expected: Log entry table updated with the new entry
-func CommandCommittedWithMajority() {
+func testCommandCommittedWithMajority() {
 
 }
 
 // Multiple clients sending different requests
 // Expected: Log entry table updated
-func ConcurrentManyClientsToLeader() {
+func testConcurrentManyClientsToLeader() {
 
 }
 
 // Single client sending 100 requests one after another
 // Expected: Log entry table updated
-func ConcurrentClientManyRequestsToLeader() {
+func testConcurrentClientManyRequestsToLeader() {
 
 }
 
