@@ -104,6 +104,7 @@ func testNoReply(t *testing.T) {
 			buffer := make([]byte, 1024)
 			conn.Read(buffer)
 			n := bytes.Index(buffer, []byte{0})
+			fmt.Println(buffer)
 			if !bytes.Equal(buffer[:n], pair.from_server) {
 				t.Error(
 					"For", pair.to_server, string(pair.to_server),
@@ -116,3 +117,28 @@ func testNoReply(t *testing.T) {
 		//time.Sleep(time.Millisecond)
 	}
 }
+
+// Add some dummy entries in raft.ClusterConfig such that majority is not achieved
+// Expected: Time out should occur after 5 sec and log entry table should not be updated
+func CommandNotCommittedWithoutMajority() {
+
+}
+
+// Expected: Log entry table updated with the new entry
+func CommandCommittedWithMajority() {
+
+}
+
+// Multiple clients sending different requests
+// Expected: Log entry table updated
+func ConcurrentManyClientsToLeader() {
+
+}
+
+// Single client sending 100 requests one after another
+// Expected: Log entry table updated
+func ConcurrentClientManyRequestsToLeader() {
+
+}
+
+// Tests similar to the previous assignment (Copy/Paste)
