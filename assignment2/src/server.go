@@ -34,6 +34,7 @@ func (t *AppendEntries) AppendEntriesRPC(args *Args, reply *Reply) error {
 }
 
 func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
+
 	appendRpc := new(AppendEntries)
 	rpc.Register(appendRpc)
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.LogPort))
@@ -61,10 +62,11 @@ func initLogger(serverId int) {
 		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
 
-	Info.Println("Initialized server")
+	Info.Println("Initialized server.")
 }
 
 func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
+
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.ClientPort))
 	if e != nil {
 		Info.Fatal("client listen error:", e)
@@ -89,7 +91,7 @@ func main() {
 	}
 
 	initLogger(sid)
-	Info.Println("Start")
+	Info.Println("Starting")
 
 	serverCount, err2 := strconv.Atoi((os.Args[2]))
 	if err2 != nil {

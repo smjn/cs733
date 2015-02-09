@@ -524,6 +524,7 @@ func InitKVStore() {
 }
 
 func MonitorCommitChannel(ch chan LogEntry) {
+	//fmt.println("herr")
 	for {
 		//temp := <-ch
 	}
