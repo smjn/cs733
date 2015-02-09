@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"net/rpc"
 	"os"
 	"os/exec"
 	"raft"
@@ -115,6 +116,75 @@ func testNoReply(t *testing.T) {
 		}
 		conn.Close()
 		time.Sleep(time.Millisecond)
+	}
+}
+
+//test that replication indeed occurred across all followers
+//update the kvstore via leader
+//but through special testing purpose functions the client should be able to
+//check in the followers whether the update got replicated
+//this is for testing purpose only and is not part of standard client - server interface
+func testReplication(t *testing.T) {
+
+	//set value in the leader
+	leader_port := raft.CLIENT_PORT + 1
+	conn, err := net.Dial("tcp", ":"+strconv.Itoa(leader_port))
+	if err != nil {
+		t.Error("Error in connecting the leader at port: " + strconv.Itoa(leader_port))
+	} else {
+		time.Sleep(time.Millisecond)
+		sending := []byte("set replica 1000 3\r\nlul\r\n")
+		expecting := []byte("OK 1\r\n")
+		conn.Write(sending)
+		buffer := make([]byte, 1024)
+		conn.Read(buffer)
+		n := bytes.Index(buffer, []byte{0})
+		if !bytes.Equal(buffer[:n], expecting) {
+			t.Error(
+				"For", sending, string(sending),
+				"expected", expecting, string(expecting),
+				"got", buffer[:n], string(buffer[:n]),
+			)
+		}
+		conn.Close()
+		time.Sleep(time.Millisecond)
+	}
+
+	//test if the value got updated in the followers
+
+	presentChan := make(chan bool)
+	go monitorPresentChannel(presentChan, t)
+	for _, server := range raft.GetClusterConfig().Servers[1:] {
+		go func(presentChan chan bool) {
+			client, err := rpc.Dial("tcp", server.Hostname+":"+strconv.Itoa(server.LogPort))
+			if err != nil {
+				Info.Fatal("Dialing:", err)
+			}
+			reply := new(TestReply)
+			reply.replica_updated = false
+			args := new(TestArgs)
+			args.key = "replica"
+			args.value = []byte("lul")
+			args.version = 1
+
+			testerCall := client.Go("Tester.TesterRPC", args, reply, nil) //check if it is replicated
+			testerCall = <-testerCall.Done
+			presentChan <- reply.replica_updated
+		}(presentChan)
+	}
+}
+
+func monitorPresentChannel(presentChan chan bool, t *testing.T) {
+	countPresent := 0
+	var isPresent bool
+	for i := 1; i <= 4; i++ {
+		isPresent = <-presentChan
+		if isPresent {
+			countPresent++
+		}
+	}
+	if countPresent != 4 {
+		t.Error("The update didn't occur in all the followers")
 	}
 }
 

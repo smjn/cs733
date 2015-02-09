@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"connhandler"
 	"io/ioutil"
 	"log"
@@ -19,6 +20,40 @@ var Info *log.Logger
 var DEBUG = true
 
 type AppendEntries struct{}
+
+//only for testing purpose
+type Tester struct{}
+
+type TestArgs struct {
+	key     string
+	value   []byte
+	version uint64
+}
+
+type TestReply struct {
+	replica_updated bool
+}
+
+//only for testing purpose
+//this function checks for the key value in its kvstore and sets replica_updated true if present and false if absent
+func (t *Tester) testerRPC(args *TestArgs, reply *TestReply) error {
+	table := raft.GetKeyValStr()
+	table.RLock()
+	defer table.RUnlock()
+	dic := table.GetDicKVstr()
+	if v, ok := dic[args.key]; ok {
+		the_val := v.GetVal()
+		the_vers := v.GetVers()
+		if bytes.Equal(the_val, args.value) && the_vers == args.version {
+			reply.replica_updated = true
+			return nil
+		} else {
+			return nil
+		}
+	} else {
+		return nil
+	}
+}
 
 type Reply struct {
 	X int

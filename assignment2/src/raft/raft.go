@@ -75,6 +75,10 @@ type AppendEntries struct{}
 
 var cluster_config *ClusterConfig
 
+func GetClusterConfig() *ClusterConfig {
+	return cluster_config
+}
+
 func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
 	rft := new(Raft)
 	rft.commitCh = commitCh
