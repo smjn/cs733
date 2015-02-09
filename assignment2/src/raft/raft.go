@@ -4,14 +4,15 @@ import (
 	"log"
 	"net/rpc"
 	"strconv"
+	"sync"
 	"time"
 )
 
 //constant values used
 const (
-	CLIENT_PORT = 9000
-	LOG_PORT    = 8000
-	ACK_TIMEOUT = 5
+	ClientPORT = 9000
+	LogPORT    = 20000
+	AckTIMEOUT = 5
 )
 
 // Logger
@@ -45,6 +46,7 @@ type Raft struct {
 	commitCh       chan LogEntry
 	cluster_config *ClusterConfig //cluster
 	id             int            //this server id
+	sync.RWMutex
 }
 
 type LogEntry interface {
@@ -126,6 +128,10 @@ func (entry *LogEntryData) Data() []byte {
 
 func (entry *LogEntryData) Committed() bool {
 	return entry.committed
+}
+
+func Test() {
+
 }
 
 //make raft implement the append function
