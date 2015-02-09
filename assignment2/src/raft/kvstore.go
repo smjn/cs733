@@ -216,7 +216,7 @@ func MonitorCommitChannel(ch chan LogEntry) {
 			log.Fatal("Error decoding command!", err)
 		}
 		ParseInput(conn, cmd)
-		//Debug()
+		Debug()
 	}
 }
 
