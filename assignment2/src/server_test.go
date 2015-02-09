@@ -44,7 +44,7 @@ func TestAll(t *testing.T) {
 
 //run servers
 func testServersCommunic(i int, t *testing.T) {
-	cmd := exec.Command("go", "run", "server.go", strconv.Itoa(i), strconv.Itoa(NUM_SERVERS))
+	cmd := exec.Command("go", "run", "server.go", strconv.Itoa(i), strconv.Itoa(NUM_SERVERS), "x")
 	f, err := os.OpenFile(strconv.Itoa(i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		t.Errorf("error opening file: %v", err)

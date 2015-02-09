@@ -19,15 +19,19 @@ const (
 // Logger
 var Info *log.Logger
 
+// Global variable for generating unique log sequence numbers
 var lsn Lsn
 
 // Flag for enabling/disabling logging functionality
 var DEBUG = true
 
-type ErrRedirect int // See Log.Append. Implements Error interface.
+// See Log.Append. Implements Error interface.
+type ErrRedirect int
 
-type Lsn uint64 //Log sequence number, unique for all time.
+//Log sequence number, unique for all time.
+type Lsn uint64
 
+// Stores the server information
 type ServerConfig struct {
 	Id         int    // Id of server. Must be unique
 	Hostname   string // name or ip of host
@@ -35,6 +39,7 @@ type ServerConfig struct {
 	LogPort    int    // tcp port for inter-replica protocol messages.
 }
 
+// Stores the replica information of the cluster
 type ClusterConfig struct {
 	Path    string         // Directory for persistent log
 	Servers []ServerConfig // All servers in this cluster
@@ -44,34 +49,42 @@ type SharedLog interface {
 	Append(data []byte) (LogEntry, error)
 }
 
+// Raft information
 type Raft struct {
-	LogArray      []*LogEntryData
-	commitCh      chan LogEntry
-	clusterConfig *ClusterConfig //cluster
-	id            int            //this server id
+	LogArray      []*LogEntryData // In memory store for log entries
+	commitCh      chan LogEntry   // Commit Channel
+	clusterConfig *ClusterConfig  // Cluster
+	id            int             // Server id
 	sync.RWMutex
 }
 
+// Log entry interface
 type LogEntry interface {
-	GetLsn() Lsn
-	GetData() []byte
-	GetCommitted() bool
-	SetCommitted(status bool)
+	GetLsn() Lsn              // Returns Lsn
+	GetData() []byte          // Returns Data
+	GetCommitted() bool       // Returns committed status
+	SetCommitted(status bool) // Sets committed status
 }
 
 type LogEntryData struct {
-	Id        Lsn
-	Data      []byte
-	Committed bool
-	conn      net.Conn
+	Id        Lsn      // Unique identifier for log entry
+	Data      []byte   // Data bytes
+	Committed bool     // Commit status
+	conn      net.Conn // Connection for communicating with client
 }
 
+// Structure used for replying to the RPC calls
 type Reply struct {
 	X int
 }
 
+// Structure for registering RPC methods
 type AppendEntries struct{}
 
+// Creates a raft object. This implements the SharedLog interface.
+// commitCh is the channel that the kvstore waits on for committed messages.
+// When the process starts, the local disk log is read and all committed
+// entries are recovered and replayed
 func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, logger *log.Logger) (*Raft, error) {
 	rft := new(Raft)
 	rft.commitCh = commitCh
@@ -82,6 +95,9 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, lo
 	return rft, nil
 }
 
+// Creates a log entry. This implements the LogEntry interface
+// data: data bytes, committed: commit status, conn: connection to client
+// Returns the log entry
 func NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
 	entry := new(LogEntryData)
 
@@ -93,7 +109,7 @@ func NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
 	return entry
 }
 
-//goroutine that monitors channel to check if the majority of servers have replied
+// Goroutine that monitors channel to check if the majority of servers have replied
 func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh chan bool) {
 	acks_received := 0
 	num_servers := len(rft.clusterConfig.Servers)
@@ -132,19 +148,22 @@ func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh c
 	}
 }
 
-//make LogEntryData implement the LogEntry Interface
+// Gets the Lsn
 func (entry *LogEntryData) GetLsn() Lsn {
 	return entry.Id
 }
 
+// Get data
 func (entry *LogEntryData) GetData() []byte {
 	return entry.Data
 }
 
+// Get committed status
 func (entry *LogEntryData) GetCommitted() bool {
 	return entry.Committed
 }
 
+// Sets the committed status
 func (entry *LogEntryData) SetCommitted(committed bool) {
 	entry.Committed = committed
 }

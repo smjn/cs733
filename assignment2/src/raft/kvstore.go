@@ -169,6 +169,10 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 	return 0
 }
 
+/*Function monitors the channel for committed log entries approved by majority
+ *arguments: Commit channel
+ *return: none
+ */
 func MonitorCommitChannel(ch chan LogEntry) {
 	for {
 		temp := <-ch
@@ -491,6 +495,10 @@ func Debug() {
 	logger.Println("----end debug----")
 }
 
+/*Function that initializes the KV Store
+ *arguments: Logger
+ *return: none
+ */
 func InitKVStore(log *log.Logger) {
 	logger = log
 
