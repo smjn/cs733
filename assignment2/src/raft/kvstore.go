@@ -49,6 +49,16 @@ type Data struct {
 	isPerpetual bool   //specifies that the key does not expire
 }
 
+//get value
+func (d *Data) GetVal() []byte {
+	return d.value
+}
+
+//get version
+func (d *Data) GetVers() uint64 {
+	return d.version
+}
+
 //represents the main hashtable where the dance actually happens
 type KeyValueStore struct {
 	dictionary   map[string]*Data //the hashtable that stores the (key, value) pairs
@@ -60,6 +70,16 @@ var logger *log.Logger
 
 //cache
 var table *KeyValueStore
+
+//function to get access to the keyvaluestore
+func GetKeyValStr() *KeyValueStore {
+	return table
+}
+
+//access the dictionary
+func (kvstr *KeyValueStore) GetDicKVstr() map[string]*Data {
+	return kvstr.dictionary
+}
 
 /*Simple write function to send information to the client
  *arguments: client connection, msg to send to the client

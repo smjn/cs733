@@ -81,6 +81,12 @@ type Reply struct {
 // Structure for registering RPC methods
 type AppendEntries struct{}
 
+var cluster_config *ClusterConfig
+
+func GetClusterConfig() *ClusterConfig {
+	return cluster_config
+}
+
 // Creates a raft object. This implements the SharedLog interface.
 // commitCh is the channel that the kvstore waits on for committed messages.
 // When the process starts, the local disk log is read and all committed
@@ -89,6 +95,7 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, lo
 	rft := new(Raft)
 	rft.commitCh = commitCh
 	rft.clusterConfig = config
+	cluster_config = config
 	rft.id = thisServerId
 	Info = logger
 	lsn = 0
@@ -100,7 +107,6 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, lo
 // Returns the log entry
 func NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
 	entry := new(LogEntryData)
-
 	entry.Id = lsn
 	entry.Data = data
 	entry.conn = conn
