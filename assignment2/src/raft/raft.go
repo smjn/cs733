@@ -83,6 +83,16 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*
 	return rft, nil
 }
 
+func NewLogEntry(id Lsn, data []byte, committed bool, conn net.Conn) *LogEntryData {
+	entry := new(LogEntryData)
+
+	entry.id = id
+	entry.data = data
+	entry.conn = conn
+	entry.committed = committed
+	return entry
+}
+
 //goroutine that monitors channel to check if the majority of servers have replied
 func monitorAckChannel(rft *Raft, ack_ch <-chan int, log_entry LogEntry, majCh chan bool) {
 	acks_received := 0
@@ -136,11 +146,8 @@ func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 	if rft.id != 1 {
 		return nil, ErrRedirect(1)
 	}
-	temp := new(LogEntryData)
-	temp.id = 1
-	temp.committed = false
-	temp.data = data
-	temp.conn = conn
+	temp := NewLogEntry(1, data, false, conn)
+
 	rft.log_array = append(rft.log_array, temp)
 
 	ackChan := make(chan int)

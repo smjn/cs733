@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	//"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -31,7 +31,7 @@ func TestAll(t *testing.T) {
 		go testServersCommunic(i, t)
 	}
 	//wait for some time so that servers are ready
-	time.Sleep(4 * time.Second)
+	time.Sleep(time.Second)
 
 	//run client that tries connecting to the followers
 	testConnectFollower(t)
@@ -62,7 +62,7 @@ func testConnectFollower(t *testing.T) {
 		if err != nil {
 			t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 		} else {
-			time.Sleep(time.Millisecond)
+			//time.Sleep(time.Millisecond)
 			sending := []byte("set mykey1 100 3\r\nlul\r\n")
 			port := strconv.Itoa(raft.CLIENT_PORT + 1)
 			expecting := []byte("ERR_REDIRECT 127.0.0.1 " + port + "\r\n")
@@ -79,7 +79,7 @@ func testConnectFollower(t *testing.T) {
 				)
 			}
 			conn.Close()
-			time.Sleep(time.Millisecond)
+			//time.Sleep(time.Millisecond)
 		}
 	}
 }
@@ -98,7 +98,7 @@ func testNoReply(t *testing.T) {
 	if err != nil {
 		t.Error("Error in connecting the server at port: " + strconv.Itoa(server_port))
 	} else {
-		time.Sleep(time.Millisecond)
+		//time.Sleep(time.Millisecond)
 		for _, pair := range noreply_cases {
 			conn.Write(pair.to_server)
 			buffer := make([]byte, 1024)
@@ -113,6 +113,6 @@ func testNoReply(t *testing.T) {
 			}
 		}
 		conn.Close()
-		time.Sleep(time.Millisecond)
+		//time.Sleep(time.Millisecond)
 	}
 }
