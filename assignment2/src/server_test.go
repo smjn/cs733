@@ -28,11 +28,11 @@ type Testpair struct {
 //
 func TestAll(t *testing.T) {
 	//start the servers
-	for i := 1; i <= NUM_SERVERS; i++ {
+	/*for i := 1; i <= NUM_SERVERS; i++ {
 		go testServersCommunic(i, t)
 	}
 	//wait for some time so that servers are ready
-	time.Sleep(4 * time.Second)
+	time.Sleep(4 * time.Second)*/
 
 	//run client that tries connecting to the followers
 	testConnectFollower(t)
@@ -41,6 +41,11 @@ func TestAll(t *testing.T) {
 	testNoReply(t)
 
 	testSet(t)
+
+	//note: this testing function is for our own verifiaction that replication did infact
+	//go through and is not part of standard client-server interface
+	//should be commented out when pitted against others servers
+	testReplication(t)
 }
 
 //run servers
@@ -121,8 +126,7 @@ func testNoReply(t *testing.T) {
 	}
 }
 
-//noreply option is not more valid with set and cas
-//client should get command error from the server if it sends 'no reply' option
+//simple test case
 func testSet(t *testing.T) {
 	var noreply_cases = []Testpair{
 		{[]byte("set mykey1 100 3\r\nadd\r\n"), []byte("OK 1\r\n")},
@@ -189,9 +193,12 @@ func testReplication(t *testing.T) {
 
 	presentChan := make(chan bool)
 	go monitorPresentChannel(presentChan, t)
-	for _, server := range raft.GetClusterConfig().Servers[1:] {
+
+	for i := 2; i <= NUM_SERVERS; i++ {
+		//for _, server := range raft.GetClusterConfig().Servers[1:] {
 		go func(presentChan chan bool) {
-			client, err := rpc.Dial("tcp", server.Hostname+":"+strconv.Itoa(server.LogPort))
+			//client, err := rpc.Dial("tcp", server.Hostname+":"+strconv.Itoa(server.LogPort))
+			client, err := rpc.Dial("tcp", "127.0.0.1:"+strconv.Itoa(raft.LOG_PORT+i))
 			if err != nil {
 				Info.Fatal("Dialing:", err)
 			}
