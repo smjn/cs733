@@ -22,22 +22,26 @@ var rft *raft.Raft
 //Receiver fot RPC
 type AppendEntries struct{}
 
-//encapsulate the return value of RPC
+//receiver for testing RPC
 //only for testing purpose
 type Tester struct{}
 
+//RPC argument for testing the replication of keys value version across key value stores
 type TestArgs struct {
 	key     string
 	value   []byte
 	version uint64
 }
 
+// RPC argument with boolean value in the reply to confirm that indeed the replication went through across servers
 type TestReply struct {
 	replica_updated bool
 }
 
 //only for testing purpose
-//this function checks for the key value in its kvstore and sets replica_updated true if present and false if absent
+//this function checks for the key value in its kvstore and sets reply.replica_updated true if present and false if absent
+//arguments: args contains the key, value, version to be matched
+//reply is the reply to be sent
 func (t *Tester) testerRPC(args *TestArgs, reply *TestReply) error {
 	table := raft.GetKeyValStr()
 	table.RLock()

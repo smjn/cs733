@@ -28,11 +28,11 @@ type Testpair struct {
 //
 func TestAll(t *testing.T) {
 	//start the servers
-	/*for i := 1; i <= NUM_SERVERS; i++ {
+	for i := 1; i <= NUM_SERVERS; i++ {
 		go testServersCommunic(i, t)
 	}
 	//wait for some time so that servers are ready
-	time.Sleep(4 * time.Second)*/
+	time.Sleep(4 * time.Second)
 
 	//run client that tries connecting to the followers
 	testConnectFollower(t)
