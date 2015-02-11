@@ -7,7 +7,7 @@
 * Bharath Radhakrishnan (133050014)
 * Harshit Pande (133050040)
 
-### Note: As required by the assignment this part doesn't implement full RAFT protocol but only the procedure to get majority from the followers and then updating the shared log in all the server.
+### Note: As required by the assignment this part doesn't implement full RAFT protocol but only the procedure to get majority from the followers and then updating the key-value store in all the server.
 
 This part of assignment implements the RAFT layer on top of the KVStore prepared in the assignment1 (https://git.cse.iitb.ac.in/smahajan/cs733/tree/master/assignment1). This is a consensus protocol which allows coherent replication across multiple servers (here simulated by separate processes).
 
@@ -26,8 +26,8 @@ In this iteration, we've modularised the code as follows:
 
 Note: The test cases are still under development.
 
-###Usage:
-You need to simply run the NUM_SERVERS (which set 5 as of now in `server_test.go`) instances of `server_go`
+### Usage:
+You need to simply run the NUM_SERVERS (which set 5 as of now in `server_test.go`) instances of `server.go`
 In bash this can be done simply as:
 ```
 #!/bin/bash
