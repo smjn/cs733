@@ -2,6 +2,7 @@ package raft
 
 import (
 	"log"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"strconv"
@@ -13,7 +14,12 @@ import (
 const (
 	CLIENT_PORT = 9000
 	LOG_PORT    = 20000
-	ACK_TIMEOUT = 5
+	ACK_TIMEOUT = 5	
+	MIN_TIMEOUT = 300
+	MAX_TIMEOUT = 500
+	LEADER      = iota
+	CANDIDATE   = iota
+	FOLLOWER    = iota
 )
 
 // Logger
@@ -45,6 +51,26 @@ type ClusterConfig struct {
 	Servers []ServerConfig // All servers in this cluster
 }
 
+type ClientAppend struct{
+	
+}
+
+type VoteRequest struct{
+	
+}
+
+type AppendRPC struct{
+	
+}
+
+type Timeout struct{
+	
+}
+
+type RaftEvent interface{
+	
+}
+
 type SharedLog interface {
 	Append(data []byte, conn net.Conn) (LogEntry, error)
 	AddToChannel(entry LogEntry)
@@ -57,6 +83,7 @@ type Raft struct {
 	clusterConfig *ClusterConfig  // Cluster
 	id            int             // Server id
 	sync.RWMutex
+	eventCh chan RaftEvent	//receive events related to various states
 }
 
 // Log entry interface
@@ -91,13 +118,14 @@ type AppendEntries struct{}
 // commitCh is the channel that the kvstore waits on for committed messages.
 // When the process starts, the local disk log is read and all committed
 // entries are recovered and replayed
-func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, logger *log.Logger) (*Raft, error) {
+func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, eventCh, chan RaftEvent, logger *log.Logger) (*Raft, error) {
 	rft := new(Raft)
 	rft.commitCh = commitCh
 	rft.clusterConfig = config
 	rft.id = thisServerId
 	Info = logger
 	lsn = 0
+	rft.eventCh = eventCh
 	return rft, nil
 }
 
@@ -267,4 +295,56 @@ func NewClusterConfig(num_servers int) (*ClusterConfig, error) {
 
 func (e ErrRedirect) Error() string {
 	return "Redirect to server " + strconv.Itoa(0)
+}
+
+//entry loop to raft
+func (raft *Raft) loop() {
+	state := FOLLOWER
+	for {
+		switch state {
+		case FOLLOWER:
+			state = follower()
+		case CANDIDATE:
+			state = candidate()
+		case LEADER:
+			state = leader()
+		default:
+			return
+		}
+	}
+}
+
+func (raft *Raft) follower() {
+	//start candidate timeout
+	canTimeout = time.After((randGen.Intn(MAX_TIMEOUT) + MIN_TIMEOUT) % MAX_TIMEOUT)
+	for {
+		//wrap in select
+        event := <- raft.eventCh
+        switch event.(type) {
+        case ClientAppend:
+            // Do not handle clients in follower mode. Send it back up the
+            // pipe with committed = false
+            ev.logEntry.commited = false
+            commitCh <- ev.logentry
+        case VoteRequest:
+            msg = event.msg
+            if msg.term < currentterm, respond with 
+            if msg.term > currentterm, upgrade currentterm
+            if not already voted in my term
+                reset timer
+                reply ok to event.msg.serverid
+                remember term, leader id (either in log or in separate file)
+        case AppendRPC:
+            reset timer
+            if msg.term < currentterm, ignore
+            reset heartbeat timer
+            upgrade to event.msg.term if necessary
+            if prev entries of my log and event.msg match
+               add to disk log
+               flush disk log
+               respond ok to event.msg.serverid
+            else
+               respond err.
+        case Timeout : return candidate  // new state back to loop()
+    }
 }

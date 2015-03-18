@@ -4,9 +4,11 @@ package main
 import (
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"raft"
 	"strconv"
+	"time"
 )
 
 // Logger
@@ -33,6 +35,7 @@ func initLogger(serverId int, toDebug bool) {
 
 //Entry point for application. Starts all major server go routines and then waits for ever
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	sid, err := strconv.Atoi(os.Args[1])
 	ch1 := make(chan bool)
 	ch2 := make(chan bool)
