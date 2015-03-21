@@ -1,62 +1,35 @@
 // server.go
-package main
+package raft
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"os"
-	"raft"
 	"strconv"
-	"time"
 )
 
-// Logger
-var Info *log.Logger
+var rafts map[int]*Raft
 
-//global raft object for each server instance
-var rft *raft.Raft
-
-//Simple logger that is enabled or disabled according to the command line arguments. In test cases
-//it is redirected to a file per server {1..5}.
-//arguments: current server id, toggle enable/disable
-//return: none
-//receiver: none
-func initLogger(serverId int, toDebug bool) {
-	// Logger Initializaion
+func getLogger(serverId int, toDebug bool) (l *log.Logger) {
 	if !toDebug {
-		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+		l = log.New(ioutil.Discard, "INFO: ", log.Ltime|log.Lshortfile)
 	} else {
-		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+		logf, _ := os.OpenFile(strconv.Itoa(serverId), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+		l = log.New(logf, "INFO: ", log.Ltime|log.Lshortfile)
 	}
 
-	Info.Println("Initialized server.")
+	l.Println("Initialized server.")
+	return l
 }
 
-//Entry point for application. Starts all major server go routines and then waits for ever
-func main() {
-	rand.Seed(time.Now().UnixNano())
-	sid, err := strconv.Atoi(os.Args[1])
-
-	if err != nil {
-		Info.Println("argument ", os.Args[1], "is not string")
+func Start(serverId int, commitCh chan LogEntry, eventCh chan RaftEvent, dummyCh chan bool, toDebug bool) {
+	clusterConfig, _ := NewClusterConfig(5)
+	rft, _ := NewRaft(clusterConfig, serverId, commitCh, eventCh, true)
+	if rafts == nil {
+		rafts = make(map[int]*Raft)
 	}
-
-	if len(os.Args) > 3 {
-		initLogger(sid, true)
-	} else {
-		initLogger(sid, false)
-	}
-	Info.Println("Starting")
-
-	serverCount, err2 := strconv.Atoi((os.Args[2]))
-	if err2 != nil {
-		Info.Println("argument ", os.Args[2], "is not string")
-	}
-
-	server, _ := raft.NewServerConfig(sid)
-	clusterConfig, _ := raft.NewClusterConfig(serverCount)
-	commitCh := make(chan raft.LogEntry)
-
-	rft, _ = raft.NewRaft(clusterConfig, sid, commitCh, Info)
+	rafts[serverId] = rft
+	fmt.Println(len(rafts))
+	rft.loop()
 }
