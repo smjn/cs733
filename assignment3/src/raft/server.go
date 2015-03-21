@@ -37,8 +37,7 @@ func initLogger(serverId int, toDebug bool) {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	sid, err := strconv.Atoi(os.Args[1])
-	ch1 := make(chan bool)
-	ch2 := make(chan bool)
+
 	if err != nil {
 		Info.Println("argument ", os.Args[1], "is not string")
 	}
@@ -60,13 +59,4 @@ func main() {
 	commitCh := make(chan raft.LogEntry)
 
 	rft, _ = raft.NewRaft(clusterConfig, sid, commitCh, Info)
-	raft.InitKVStore(Info, sid)
-
-	go raft.MonitorCommitChannel(commitCh) //for kvstore
-	go initClientCommunication(server, rft, ch1)
-	go initInterServerCommunication(server, rft, ch2)
-
-	for <-ch1 && <-ch2 {
-
-	}
 }

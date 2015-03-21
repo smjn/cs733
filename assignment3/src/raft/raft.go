@@ -52,7 +52,7 @@ type ClusterConfig struct {
 }
 
 type ClientAppend struct{
-	
+	logEntry LogEntry
 }
 
 type VoteRequest struct{
@@ -316,17 +316,17 @@ func (raft *Raft) loop() {
 
 func (raft *Raft) follower() {
 	//start candidate timeout
-	canTimeout = time.After((randGen.Intn(MAX_TIMEOUT) + MIN_TIMEOUT) % MAX_TIMEOUT)
+	isCandidateChan = time.After((rand.Intn(MAX_TIMEOUT) + MIN_TIMEOUT) % MAX_TIMEOUT)
 	for {
 		//wrap in select
         event := <- raft.eventCh
         switch event.(type) {
-        case ClientAppend:
+        case *ClientAppend:
             // Do not handle clients in follower mode. Send it back up the
             // pipe with committed = false
-            ev.logEntry.commited = false
-            commitCh <- ev.logentry
-        case VoteRequest:
+			event.(*LogEntry).SetCommitted(false)
+			raft.commitCh <- event.(*LogEntry)
+        case *VoteRequest:
             msg = event.msg
             if msg.term < currentterm, respond with 
             if msg.term > currentterm, upgrade currentterm
@@ -334,7 +334,7 @@ func (raft *Raft) follower() {
                 reset timer
                 reply ok to event.msg.serverid
                 remember term, leader id (either in log or in separate file)
-        case AppendRPC:
+        case *AppendRPC:
             reset timer
             if msg.term < currentterm, ignore
             reset heartbeat timer
@@ -345,6 +345,6 @@ func (raft *Raft) follower() {
                respond ok to event.msg.serverid
             else
                respond err.
-        case Timeout : return candidate  // new state back to loop()
+        case *Timeout : return candidate  // new state back to loop()
     }
 }
