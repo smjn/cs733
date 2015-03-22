@@ -23,8 +23,9 @@ func getLogger(serverId int, toDebug bool) (l *log.Logger) {
 	return l
 }
 
-func Start(serverId int, commitCh chan LogEntry, dummyCh chan bool, toDebug bool) {
+func Start(serverId int, toDebug bool) {
 	eventCh := make(chan RaftEvent)
+	commitCh := make(chan LogEntry)
 	clusterConfig, _ := NewClusterConfig(5)
 	rft, _ := NewRaft(clusterConfig, serverId, commitCh, eventCh, true)
 	if rafts == nil {

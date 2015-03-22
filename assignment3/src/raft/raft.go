@@ -13,14 +13,14 @@ import (
 
 //constant values used
 const (
-	CLIENT_PORT = 9000
-	LOG_PORT    = 20000
-	ACK_TIMEOUT = 5
-	MIN_TIMEOUT = 300
-	MAX_TIMEOUT = 500
-	LEADER      = iota
-	CANDIDATE
-	FOLLOWER
+	CLIENT_PORT  = 9000
+	LOG_PORT     = 20000
+	ACK_TIMEOUT  = 5
+	MIN_TIMEOUT  = 300
+	MAX_TIMEOUT  = 500
+	LEADER       = 10
+	CANDIDATE    = 20
+	FOLLOWER     = 30
 	VOTED_FOR    = "votedFor"
 	CURRENT_TERM = "currentTerm"
 	FILE_WRITTEN = 0
@@ -261,20 +261,20 @@ func (e ErrRedirect) Error() string {
 func (rft *Raft) loop() {
 	state := FOLLOWER
 	for {
+		rft.Info.Println("hello")
 		switch state {
 		case FOLLOWER:
 			state = rft.follower()
-			//		case CANDIDATE:
-			//			state = candidate()
-			//		case LEADER:
-			//			state = leader()
-		default:
-			return
+		case CANDIDATE:
+			state = rft.candidate()
+		case LEADER:
+			state = rft.leader()
 		}
 	}
 }
 
 func getTimer() *time.Timer {
+	rand.Seed(time.Now().UnixNano())
 	return time.NewTimer(time.Millisecond * time.Duration((rand.Intn(MAX_TIMEOUT)+MIN_TIMEOUT)%MAX_TIMEOUT))
 }
 
@@ -304,6 +304,7 @@ func (rft *Raft) follower() int {
 	//start candidate timeout
 	electionTimeout := getTimer()
 	for {
+		rft.Info.Println("xyz")
 		//wrap in select
 		select {
 		case <-electionTimeout.C:
@@ -377,4 +378,12 @@ func (rft *Raft) follower() int {
 			}
 		}
 	}
+}
+
+func (rft *Raft) candidate() int {
+	return 1
+}
+
+func (rft *Raft) leader() int {
+	return 1
 }
