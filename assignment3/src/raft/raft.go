@@ -13,19 +13,21 @@ import (
 
 //constant values used
 const (
-	CLIENT_PORT  = 9000
-	LOG_PORT     = 20000
-	ACK_TIMEOUT  = 5
-	MIN_TIMEOUT  = 300
-	MAX_TIMEOUT  = 500
-	LEADER       = 10
-	CANDIDATE    = 20
-	FOLLOWER     = 30
-	VOTED_FOR    = "votedFor"
-	CURRENT_TERM = "currentTerm"
-	FILE_WRITTEN = 0
-	FILE_ERR     = -1
-	NULL_VOTE    = 0
+	CLIENT_PORT       = 9000
+	LOG_PORT          = 20000
+	ACK_TIMEOUT       = 5
+	MIN_TIMEOUT       = 300
+	MAX_TIMEOUT       = 500
+	LEADER            = 10
+	CANDIDATE         = 20
+	FOLLOWER          = 30
+	VOTED_FOR         = "votedFor"
+	CURRENT_TERM      = "currentTerm"
+	FILE_WRITTEN      = 0
+	FILE_ERR          = -1
+	NULL_VOTE         = 0
+	LOG_INVALID_INDEX = -1
+	LOG_INVALID_TERM  = -1
 )
 
 // Global variable for generating unique log sequence numbers
@@ -92,12 +94,14 @@ type Raft struct {
 	clusterConfig *ClusterConfig  // Cluster
 	id            int             // Server id
 	sync.RWMutex
-	Info        *log.Logger    //log for raft instance
-	eventCh     chan RaftEvent //receive events related to various states
-	votedFor    int
-	currentTerm int
-	commitIndex int
-	voters      int
+	Info           *log.Logger    //log for raft instance
+	eventCh        chan RaftEvent //receive events related to various states
+	votedFor       int
+	currentTerm    int
+	commitIndex    int
+	voters         int
+	monitorVotesCh chan bool
+	et             *time.Timer
 }
 
 // Log entry interface
@@ -165,14 +169,19 @@ func writeFile(name string, serverId int, data int, info *log.Logger) int {
 // commitCh is the channel that the kvstore waits on for committed messages.
 // When the process starts, the local disk log is read and all committed
 // entries are recovered and replayed
-func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, eventCh chan RaftEvent, toDebug bool) (*Raft, error) {
+func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, eventCh chan RaftEvent, monitorVotesCh chan bool, toDebug bool) (*Raft, error) {
 	rft := new(Raft)
 	rft.commitCh = commitCh
 	rft.clusterConfig = config
 	rft.id = thisServerId
 	rft.eventCh = eventCh
 	rft.Info = getLogger(thisServerId, toDebug)
-	rft.currentTerm = getSingleDataFromFile(CURRENT_TERM, thisServerId, rft.Info)
+	if v := getSingleDataFromFile(CURRENT_TERM, thisServerId, rft.Info); v != FILE_ERR {
+		rft.currentTerm = v
+	} else {
+		rft.currentTerm = 0
+	}
+	rft.monitorVotesCh = monitorVotesCh
 	getSingleDataFromFile(VOTED_FOR, thisServerId, rft.Info) //initialize the votedFor file.
 	return rft, nil
 }
@@ -261,7 +270,6 @@ func (e ErrRedirect) Error() string {
 func (rft *Raft) loop() {
 	state := FOLLOWER
 	for {
-		rft.Info.Println("hello")
 		switch state {
 		case FOLLOWER:
 			state = rft.follower()
@@ -273,19 +281,20 @@ func (rft *Raft) loop() {
 	}
 }
 
-func getTimer() *time.Timer {
+func getRandTime(log *log.Logger) time.Duration {
 	rand.Seed(time.Now().UnixNano())
-	return time.NewTimer(time.Millisecond * time.Duration((rand.Intn(MAX_TIMEOUT)+MIN_TIMEOUT)%MAX_TIMEOUT))
-}
-
-func reInitializeTimer(t *time.Timer) *time.Timer {
-	t.Stop()
-	return getTimer()
+	t := time.Millisecond * time.Duration(rand.Intn(MAX_TIMEOUT-MIN_TIMEOUT)+MIN_TIMEOUT)
+	log.Println("New rand time", t)
+	return t
 }
 
 func (rft *Raft) grantVote(reply bool, currentTerm int) {
 	if reply {
 		rft.voters++
+		rft.Info.Println(rft.id, "got vote")
+		if rft.voters >= len(rafts)/2+1 {
+			rft.monitorVotesCh <- true
+		}
 	}
 }
 
@@ -300,24 +309,38 @@ func (rft *Raft) updateTermAndVote(term int) {
 	rft.votedFor = NULL_VOTE
 }
 
+func (rft *Raft) LogF(msg string) {
+	rft.Info.Println("F:", rft.id, msg)
+}
+
+func (rft *Raft) LogC(msg string) {
+	rft.Info.Println("C:", rft.id, msg)
+}
+
+func (rft *Raft) LogL(msg string) {
+	rft.Info.Println("L:", rft.id, msg)
+}
+
 func (rft *Raft) follower() int {
 	//start candidate timeout
-	electionTimeout := getTimer()
+	rft.et = time.NewTimer(getRandTime(rft.Info))
 	for {
-		rft.Info.Println("xyz")
 		//wrap in select
 		select {
-		case <-electionTimeout.C:
+		case <-rft.et.C:
+			rft.LogF("follower election timeout")
 			return CANDIDATE
 		case event := <-rft.eventCh:
 			switch event.(type) {
 			case *ClientAppend:
+				rft.LogF("got client append")
 				//Do not handle clients in follower mode.
 				//Send it back up the pipeline.
 				event.(*ClientAppend).logEntry.SetCommitted(false)
 				rft.eventCh <- event.(*ClientAppend).logEntry
 
 			case *VoteRequest:
+				rft.LogF("got vote request")
 				req := event.(*VoteRequest)
 				reply := false
 				if req.term < rft.currentTerm {
@@ -332,14 +355,19 @@ func (rft *Raft) follower() int {
 				}
 
 				if reply && rft.votedFor == NULL_VOTE {
-					electionTimeout = reInitializeTimer(electionTimeout)
+					rft.et.Reset(getRandTime(rft.Info))
+					rft.LogF("reset timer after voting")
 					writeFile(VOTED_FOR, rft.id, req.candidateId, rft.Info)
+					rft.LogF("voted for " + strconv.Itoa(req.candidateId))
 					rft.votedFor = req.candidateId
-					rafts[req.candidateId].grantVote(reply, rft.currentTerm)
 				}
+				//let leader know about the vote
+				rafts[req.candidateId].grantVote(reply, rft.currentTerm)
 
 			case *AppendRPC:
-				electionTimeout = reInitializeTimer(electionTimeout)
+				rft.LogF("got append rpc")
+				rft.et.Reset(getRandTime(rft.Info))
+				rft.LogF("reset timer on appendRPC")
 				req := event.(*AppendRPC)
 				reply := true
 				if req.term < rft.currentTerm {
@@ -374,6 +402,7 @@ func (rft *Raft) follower() int {
 						}
 					}
 				}
+				rft.LogF("AppendRPC")
 				rafts[req.leaderId].replyAppendRPC(reply, rft.currentTerm)
 			}
 		}
@@ -381,9 +410,60 @@ func (rft *Raft) follower() int {
 }
 
 func (rft *Raft) candidate() int {
-	return 1
+	//increment current term
+	rft.LogC("became candidate")
+	writeFile(CURRENT_TERM, rft.id, rft.currentTerm+1, rft.Info)
+	rft.currentTerm++
+	//vote for self
+	rft.voters = 1
+	writeFile(VOTED_FOR, rft.id, rft.id, rft.Info)
+	rft.votedFor = rft.id
+	//reset timer
+	rft.et = time.NewTimer(getRandTime(rft.Info))
+	rft.Info.Println(rft.id, "candidate got new timer")
+	//create a vote request object
+	req := &VoteRequest{
+		term:        rft.currentTerm,
+		candidateId: rft.id,
+	}
+	if len(rft.LogArray) == 0 {
+		req.lastLogIndex = LOG_INVALID_INDEX
+		req.lastLogTerm = LOG_INVALID_TERM
+	} else {
+		req.lastLogIndex = len(rft.LogArray) - 1
+		req.lastLogTerm = rft.LogArray[req.lastLogIndex].Term
+	}
+
+	//send vote request to all servers
+	for i := 1; i <= len(rafts); i++ {
+		if i != rft.id {
+			rft.LogC("sent vote request to " + strconv.Itoa(rafts[i].id))
+			rafts[i].eventCh <- req
+		}
+	}
+
+	for {
+		select {
+		case <-rft.monitorVotesCh:
+			rft.LogC("C to L")
+			return LEADER
+		case <-rft.et.C:
+			rft.LogC("C to C")
+			return CANDIDATE
+		case event := <-rft.eventCh:
+			switch event.(type) {
+			case (*AppendRPC):
+				rft.LogC("C to F")
+				return FOLLOWER
+			}
+		}
+	}
 }
 
 func (rft *Raft) leader() int {
-	return 1
+	select {
+	case <-rft.commitCh:
+		rft.LogL("hello")
+	}
+	return LEADER
 }

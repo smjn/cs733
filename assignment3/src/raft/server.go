@@ -26,8 +26,9 @@ func getLogger(serverId int, toDebug bool) (l *log.Logger) {
 func Start(serverId int, toDebug bool) {
 	eventCh := make(chan RaftEvent)
 	commitCh := make(chan LogEntry)
+	monitorVotesCh := make(chan bool)
 	clusterConfig, _ := NewClusterConfig(5)
-	rft, _ := NewRaft(clusterConfig, serverId, commitCh, eventCh, true)
+	rft, _ := NewRaft(clusterConfig, serverId, commitCh, eventCh, monitorVotesCh, true)
 	if rafts == nil {
 		rafts = make(map[int]*Raft)
 	}
