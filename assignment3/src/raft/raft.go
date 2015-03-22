@@ -21,6 +21,11 @@ const (
 	LEADER      = iota
 	CANDIDATE
 	FOLLOWER
+	VOTED_FOR    = "votedFor"
+	CURRENT_TERM = "currentTerm"
+	FILE_WRITTEN = 0
+	FILE_ERR     = -1
+	NULL_VOTE    = 0
 )
 
 // Global variable for generating unique log sequence numbers
@@ -61,6 +66,12 @@ type VoteRequest struct {
 }
 
 type AppendRPC struct {
+	term         int
+	leaderId     int
+	prevLogIndex int
+	prevLogTerm  int
+	leaderCommit int
+	entries      []*LogEntryData
 }
 
 type Timeout struct {
@@ -85,6 +96,8 @@ type Raft struct {
 	eventCh     chan RaftEvent //receive events related to various states
 	votedFor    int
 	currentTerm int
+	commitIndex int
+	voters      int
 }
 
 // Log entry interface
@@ -99,29 +112,52 @@ type LogEntryData struct {
 	Id        Lsn      // Unique identifier for log entry
 	Data      []byte   // Data bytes
 	Committed bool     // Commit status
+	Term      int      //term number
 	conn      net.Conn // Connection for communicating with client
 }
 
-func getCurrentTerm(serverId int, info *log.Logger) int {
-	if file, err := os.Open("currentTerm" + strconv.Itoa(serverId)); err != nil {
-		ioutil.WriteFile("currentTerm"+strconv.Itoa(serverId), []byte("0"), 0666)
-		info.Println("wrote in term file:0")
+func (rft *Raft) persistLog() {
+
+}
+
+func (rft *Raft) readLogFromDisk() {
+
+}
+
+func getSingleDataFromFile(name string, serverId int, info *log.Logger) int {
+	filename := name + strconv.Itoa(serverId)
+
+	if file, err := os.Open(filename); err != nil {
+		defer file.Close()
+		ioutil.WriteFile(filename, []byte("0"), 0666)
+		info.Println("wrote in " + filename + " file")
 		return 0
 	} else {
 		if data, err := ioutil.ReadFile(file.Name()); err != nil {
-			info.Println("error reading file")
-			return -1
+			info.Println("error reading file " + filename)
+			return FILE_ERR
 		} else {
-			info.Println("read from file")
+			info.Println("read from file " + filename)
 			if t, err2 := strconv.Atoi(string(data)); err2 != nil {
 				info.Println("error converting")
-				return -1
+				return FILE_ERR
 			} else {
-				info.Println("Converted success", t)
+				info.Println("Converted success "+filename, t)
 				return t
 			}
 		}
-		return -1
+	}
+}
+
+func writeFile(name string, serverId int, data int, info *log.Logger) int {
+	filename := name + strconv.Itoa(serverId)
+	if file, err := os.Open(filename); err != nil {
+		defer file.Close()
+		return FILE_ERR
+	} else {
+		ioutil.WriteFile(filename, []byte(strconv.Itoa(data)), 0666)
+		info.Println("wrote in " + filename + " file")
+		return FILE_WRITTEN //file written
 	}
 }
 
@@ -136,7 +172,8 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, ev
 	rft.id = thisServerId
 	rft.eventCh = eventCh
 	rft.Info = getLogger(thisServerId, toDebug)
-	rft.currentTerm = getCurrentTerm(thisServerId, rft.Info)
+	rft.currentTerm = getSingleDataFromFile(CURRENT_TERM, thisServerId, rft.Info)
+	getSingleDataFromFile(VOTED_FOR, thisServerId, rft.Info) //initialize the votedFor file.
 	return rft, nil
 }
 
@@ -224,10 +261,9 @@ func (e ErrRedirect) Error() string {
 func (rft *Raft) loop() {
 	state := FOLLOWER
 	for {
-		rft.Info.Println("hello")
 		switch state {
 		case FOLLOWER:
-			state = follower()
+			state = rft.follower()
 			//		case CANDIDATE:
 			//			state = candidate()
 			//		case LEADER:
@@ -242,31 +278,102 @@ func getTimer() *time.Timer {
 	return time.NewTimer(time.Millisecond * time.Duration((rand.Intn(MAX_TIMEOUT)+MIN_TIMEOUT)%MAX_TIMEOUT))
 }
 
+func reInitializeTimer(t *time.Timer) *time.Timer {
+	t.Stop()
+	return getTimer()
+}
+
+func (rft *Raft) grantVote(reply bool, currentTerm int) {
+	if reply {
+		rft.voters++
+	}
+}
+
+func (rft *Raft) replyAppendRPC(reply bool, currentTerm int) {
+	//
+}
+
+func (rft *Raft) updateTermAndVote(term int) {
+	writeFile(CURRENT_TERM, rft.id, term, rft.Info)
+	rft.currentTerm = term
+	writeFile(VOTED_FOR, rft.id, NULL_VOTE, rft.Info)
+	rft.votedFor = NULL_VOTE
+}
+
 func (rft *Raft) follower() int {
 	//start candidate timeout
-	candTimer := getTimer()
+	electionTimeout := getTimer()
 	for {
 		//wrap in select
 		select {
-		case <-candTimer.C:
+		case <-electionTimeout.C:
 			return CANDIDATE
 		case event := <-rft.eventCh:
 			switch event.(type) {
 			case *ClientAppend:
-				// Do not handle clients in follower mode. Send it back up the
-				// pipe with committed = false
+				//Do not handle clients in follower mode.
+				//Send it back up the pipeline.
 				event.(*ClientAppend).logEntry.SetCommitted(false)
-				rft.commitCh <- event.(*ClientAppend).logEntry
+				rft.eventCh <- event.(*ClientAppend).logEntry
 
 			case *VoteRequest:
 				req := event.(*VoteRequest)
+				reply := false
 				if req.term < rft.currentTerm {
-					//reply as - not accepted as leader
+					reply = false
 				}
+
+				if req.term > rft.currentTerm ||
+					req.lastLogTerm > rft.currentTerm ||
+					(req.lastLogTerm == rft.currentTerm && req.lastLogIndex >= len(rft.LogArray)) {
+					rft.updateTermAndVote(req.term)
+					reply = true
+				}
+
+				if reply && rft.votedFor == NULL_VOTE {
+					electionTimeout = reInitializeTimer(electionTimeout)
+					writeFile(VOTED_FOR, rft.id, req.candidateId, rft.Info)
+					rft.votedFor = req.candidateId
+					rafts[req.candidateId].grantVote(reply, rft.currentTerm)
+				}
+
+			case *AppendRPC:
+				electionTimeout = reInitializeTimer(electionTimeout)
+				req := event.(*AppendRPC)
+				reply := true
+				if req.term < rft.currentTerm {
+					reply = false
+				}
+
 				if req.term > rft.currentTerm {
-					//update currentTerm
+					rft.updateTermAndVote(req.term)
+					reply = true
 				}
-				//condition for - if not voted in current term
+
+				//first condition to prevent out of bounds except
+				if len(rft.LogArray) < req.prevLogIndex || rft.LogArray[req.prevLogIndex].Term != req.prevLogTerm {
+					reply = false
+				}
+
+				if reply {
+					i := req.prevLogIndex + 1
+					for ; i < len(rft.LogArray); i++ {
+						if req.entries[i-req.prevLogIndex-1].Term != rft.LogArray[i].Term {
+							break
+						}
+					}
+					rft.LogArray = append(rft.LogArray[0:i], req.entries[i-req.prevLogIndex-1:]...)
+					//todo:also add to log
+
+					if req.leaderCommit > rft.commitIndex {
+						if req.leaderCommit > len(rft.LogArray)-1 {
+							rft.commitIndex = len(rft.LogArray) - 1
+						} else {
+							rft.commitIndex = req.leaderCommit
+						}
+					}
+				}
+				rafts[req.leaderId].replyAppendRPC(reply, rft.currentTerm)
 			}
 		}
 	}
