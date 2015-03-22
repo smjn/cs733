@@ -16,7 +16,7 @@ func getLogger(serverId int, toDebug bool) (l *log.Logger) {
 		l = log.New(ioutil.Discard, "INFO: ", log.Ltime|log.Lshortfile)
 	} else {
 		logf, _ := os.OpenFile(strconv.Itoa(serverId), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-		l = log.New(logf, "INFO: ", log.Ltime|log.Lshortfile)
+		l = log.New(logf, "INFO: ", log.Ltime|log.Lmicroseconds|log.Lshortfile)
 	}
 
 	l.Println("Initialized server.")
