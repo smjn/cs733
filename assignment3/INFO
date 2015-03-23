@@ -1,0 +1,12 @@
+completed so far:
+	-follower implementation
+	-candidate implementation
+	-partial leader implementation
+	-election timeout
+	-heartbeat timeout
+
+left:
+	-leader code completion
+	-enforcing log on followers
+
+Hope to complete by Friday 2015/03/27
