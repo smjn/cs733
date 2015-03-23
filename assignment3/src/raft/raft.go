@@ -485,15 +485,14 @@ func (rft *Raft) enforceLog() {
 
 	for i := 0; i < len(rft.nextIndex); i++ {
 		if len(rft.LogArray)-1 >= rft.nextIndex[i] {
-			req.entries := rft.LogArray[rft.nextIndex[i]:len(rft.LogArray)]
-			req.prevLogIndex:=rft.nextIndex[i]-1
-			req.prevLogTerm:=rft.LogArray[rft.nextIndex[i]-1].Term
-			if !rafts[i+1].isLeader{
-				
+			req.entries = rft.LogArray[rft.nextIndex[i]:len(rft.LogArray)]
+			req.prevLogIndex = rft.nextIndex[i] - 1
+			req.prevLogTerm = rft.LogArray[rft.nextIndex[i]-1].Term
+			if !rafts[i+1].isLeader {
+				rafts[i+1].eventCh <- req
 			}
 		}
 	}
-
 }
 
 func (rft *Raft) leader() int {
