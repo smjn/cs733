@@ -308,8 +308,15 @@ func (rft *Raft) grantVote(reply bool, currentTerm int) {
 	}
 }
 
-func (rft *Raft) replyAppendRPC(reply bool, currentTerm int) {
-	//
+func (rft *Raft) replyAppendRPC(reply bool, currentTerm int, id int) {
+	defer rafts[id].Unlock()
+	rafts[id].Lock()
+	if reply {
+		rafts[id].nextIndex[id-1] = len(rft.LogArray) - 1
+		rafts[id].matchIndex[id-1] = len(rft.LogArray) - 1
+	} else {
+		rafts[id].nextIndex[id-1]--
+	}
 }
 
 func (rft *Raft) updateTermAndVote(term int) {
@@ -418,7 +425,7 @@ func (rft *Raft) follower() int {
 					}
 				}
 				rft.LogF("AppendRPC")
-				rafts[req.leaderId].replyAppendRPC(reply, rft.currentTerm)
+				rafts[req.leaderId].replyAppendRPC(reply, rft.currentTerm, rft.id)
 			}
 		}
 	}
@@ -506,6 +513,8 @@ func (rft *Raft) leader() int {
 		rft.nextIndex[i] = len(rft.LogArray)
 		rft.matchIndex[i] = 0
 	}
+
+	//go rft.enforceLog()
 
 	for {
 		select {
