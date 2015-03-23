@@ -1,12 +1,16 @@
+In assignment 2 we had used async RPCs for communication. In this assignment we went with channels and go routines, so the paradigm shift caused unexpected delays and many roadblocks that took time to resolve.
+
 completed so far:
 	-follower implementation
 	-candidate implementation
 	-partial leader implementation
 	-election timeout
 	-heartbeat timeout
+	-persistance of currentTerm and votedFor for each server
 
 left:
 	-leader code completion
 	-enforcing log on followers
+	-log persistance
 
-Hope to complete by Friday 2015/03/27
+Hope to complete by Wednesday 2015/03/25
