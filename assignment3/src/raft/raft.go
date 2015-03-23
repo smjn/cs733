@@ -58,7 +58,7 @@ type ClusterConfig struct {
 }
 
 type ClientAppend struct {
-	logEntry *LogEntry
+	logEntry *LogEntryData
 }
 
 type VoteRequest struct {
@@ -474,6 +474,26 @@ func (rft *Raft) candidate() int {
 			}
 		}
 	}
+}
+
+func (rft *Raft) enforceLog() {
+	req := &AppendRPC{
+		term:         rft.currentTerm,
+		leaderId:     rft.id,
+		leaderCommit: rft.commitIndex,
+	}
+
+	for i := 0; i < len(rft.nextIndex); i++ {
+		if len(rft.LogArray)-1 >= rft.nextIndex[i] {
+			req.entries := rft.LogArray[rft.nextIndex[i]:len(rft.LogArray)]
+			req.prevLogIndex:=rft.nextIndex[i]-1
+			req.prevLogTerm:=rft.LogArray[rft.nextIndex[i]-1].Term
+			if !rafts[i+1].isLeader{
+				
+			}
+		}
+	}
+
 }
 
 func (rft *Raft) leader() int {
