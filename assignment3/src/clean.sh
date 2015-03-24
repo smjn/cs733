@@ -1,2 +1,2 @@
 #! /bin/bash
-rm {1..5} currentTerm* votedFor*
+rm {1..5} currentTerm* votedFor* log*
