@@ -5,14 +5,13 @@ In assignment 2 we had used async RPCs for communication. In this assignment we 
 completed so far:
 	-follower implementation
 	-candidate implementation
-	-partial leader implementation
+	-leader implementation
 	-election timeout
 	-heartbeat timeout
-	-persistance of currentTerm and votedFor for each server
+	-persistence of currentTerm and votedFor for each server
+	-persistence of log
 
 left:
-	-leader code completion
-	-enforcing log on followers
-	-log persistance
+	-testing the code
 
 Hope to complete by Wednesday 2015/03/25
