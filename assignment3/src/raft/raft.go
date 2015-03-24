@@ -147,6 +147,7 @@ func (rft *Raft) persistLog() {
 }
 
 func (rft *Raft) readLogFromDisk() {
+	rft.LogArray = []*LogEntryData{}
 	if file, err := os.OpenFile(LOG_PERSIST+strconv.Itoa(rft.id), os.O_RDONLY, 0666); err != nil {
 		rft.Info.Println("error reading log persist file")
 	} else {
@@ -158,7 +159,6 @@ func (rft *Raft) readLogFromDisk() {
 				rft.Info.Println("done reading log from file")
 				break
 			} else {
-				rft.LogArray = []*LogEntryData{}
 				rft.LogArray = append(rft.LogArray, &d)
 			}
 		}
