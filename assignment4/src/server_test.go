@@ -3,13 +3,9 @@
 package main
 
 import (
-	"bytes"
 	//"fmt"
-	"net"
-	"net/rpc"
 	"os"
 	"os/exec"
-	"raft"
 	"strconv"
 	"testing"
 	"time"
@@ -27,16 +23,21 @@ type Testpair struct {
 
 //
 func TestAll(t *testing.T) {
+	dummy := make(chan bool)
 	//start the servers
-	for i := 1; i <= NUM_SERVERS; i++ {
-		go startServers(i, t)
+	for i := 0; i < NUM_SERVERS; i++ {
+		go startServers(i, t, dummy)
 	}
 	//wait for some time so that servers are ready
-	time.Sleep(4 * time.Second)
+
+	time.Sleep(1 * time.Second)
+	if <-dummy {
+
+	}
 }
 
 //run servers
-func startServers(i int, t *testing.T) {
+func startServers(i int, t *testing.T, dummy chan bool) {
 	cmd := exec.Command("go", "run", "server.go", strconv.Itoa(i), strconv.Itoa(NUM_SERVERS), "x")
 	f, err := os.OpenFile(strconv.Itoa(i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {

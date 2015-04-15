@@ -11,6 +11,7 @@ import (
 	"os"
 	"raft"
 	"strconv"
+	"time"
 )
 
 // Logger
@@ -20,10 +21,10 @@ var Info *log.Logger
 var rft *raft.Raft
 
 //Receiver for RPC
-type AppendEntries struct{}
+type RaftRPCService struct{}
 
 //Receiver for voting related RPC
-type Voting struct{}
+//type Voting struct{}
 
 //receiver for testing RPC
 //only for testing purpose
@@ -72,7 +73,7 @@ type Reply struct {
 //arguments: pointer to argument struct (has LogEntryData), pointer to reply struct
 //returns: error
 //receiver: pointer to AppendEntries
-func (t *AppendEntries) AppendRPC(args *raft.AppendRPC, reply *Reply) error {
+func (t *RaftRPCService) AppendRPC(args *raft.AppendRPC, reply *Reply) error {
 	Info.Println("append RPC invoked")
 	rft.AddToEventChannel(args)
 	reply.X = 1
@@ -83,7 +84,7 @@ func (t *AppendEntries) AppendRPC(args *raft.AppendRPC, reply *Reply) error {
 	return nil*/
 }
 
-func (t *AppendEntries) AppendReplyRPC(args *raft.AppendReplyRPC, reply *Reply) error {
+func (t *RaftRPCService) AppendReplyRPC(args *raft.AppendReply, reply *Reply) error {
 	Info.Println("append reply to leader RPC invoked")
 	rft.AddToEventChannel(args)
 	reply.X = 1
@@ -98,7 +99,7 @@ func (t *AppendEntries) AppendReplyRPC(args *raft.AppendReplyRPC, reply *Reply) 
 //arguments: pointer to argument struct (has LogEntry), pointer to reply struct
 //returns: error
 //receiver: pointer to AppendEntries
-func (t *AppendEntries) CommitRPC(args *raft.CommitData, reply *Reply) error {
+func (t *RaftRPCService) CommitRPC(args *raft.CommitData, reply *Reply) error {
 	Info.Println("Commit RPC invoked")
 	rft.LogArray[(*args).Id].SetCommitted(true)
 	rft.AddToChannel(rft.LogArray[(*args).Id])
@@ -106,29 +107,30 @@ func (t *AppendEntries) CommitRPC(args *raft.CommitData, reply *Reply) error {
 	return nil
 }
 
-func (t *Voting) VoteRequestRPC(args *raft.VoteRequest, reply *Reply) {
-	Info.Println("Request Vote RPC received from server", id)
+func (t *RaftRPCService) VoteRequestRPC(args *raft.VoteRequest, reply *Reply) error {
+	Info.Println("Request Vote RPC received")
 	rft.AddToEventChannel(args)
 	reply.X = 1
 	return nil
 }
 
-func (t *Voting) CastVoteRPC(args *raft.VoteRequestReply, reply *Reply) {
-	Info.Println("Request Vote RPC received from server", id)
+func (t *RaftRPCService) CastVoteRPC(args *raft.VoteRequestReply, reply *Reply) error {
+	Info.Println("Cast Vote RPC received")
 	rft.AddToMonitorVotesChannel(args)
 	reply.X = 1
 	return nil
 }
 
 //Initialize all the things necessary for start the server for inter raft communication.
-//The servers are running on ports 20000+serverId. {1..5}
+//The servers are running on ports 20000+serverId. {0..4}
 //arguments: pointer to current server config, pointer to raft object, a bool channel to set to true to let
 //the invoker know that the proc ended.
 //returns: none
 //receiver: none
 func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan bool) {
-	appendRpc := new(AppendEntries)
-	rpc.Register(appendRpc)
+	raftRPC := new(RaftRPCService)
+	rpc.Register(raftRPC)
+
 	listener, e := net.Listen("tcp", ":"+strconv.Itoa(server.LogPort))
 	if e != nil {
 		Info.Fatal("listen error:", e)
@@ -152,9 +154,9 @@ func initInterServerCommunication(server *raft.ServerConfig, rft *raft.Raft, ch 
 func initLogger(serverId int, toDebug bool) {
 	// Logger Initializaion
 	if !toDebug {
-		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+		Info = log.New(ioutil.Discard, "INFO: ", log.Ldate|log.Lmicroseconds|log.Lshortfile)
 	} else {
-		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+		Info = log.New(os.Stdout, "INFO: ", log.Ldate|log.Lmicroseconds|log.Lshortfile)
 	}
 
 	Info.Println("Initialized server.")
@@ -184,12 +186,9 @@ func initClientCommunication(server *raft.ServerConfig, rft *raft.Raft, ch chan 
 
 //Entry point for application. Starts all major server go routines and then waits for ever
 func main() {
-	sid, err := strconv.Atoi(os.Args[1])
+	sid, _ := strconv.Atoi(os.Args[1])
 	ch1 := make(chan bool)
 	ch2 := make(chan bool)
-	if err != nil {
-		Info.Println("argument ", os.Args[1], "is not string")
-	}
 
 	if len(os.Args) > 3 {
 		initLogger(sid, true)
@@ -213,6 +212,9 @@ func main() {
 	go raft.MonitorCommitChannel(commitCh) //for kvstore
 	go initClientCommunication(server, rft, ch1)
 	go initInterServerCommunication(server, rft, ch2)
+
+	time.Sleep(100 * time.Millisecond)
+	raft.StartRaft(rft)
 
 	for <-ch1 && <-ch2 {
 
