@@ -75,8 +75,12 @@ type VoteRequestReply struct {
 	reply       bool
 }
 
-//just alias the babe
-type AppendReply VoteRequestReply
+type AppendReply struct {
+	currentTerm int
+	reply       bool
+	fid         int
+	logLength   int
+}
 
 type AppendRPC struct {
 	term         int
@@ -368,51 +372,37 @@ func monitorVotesChannelRoutine(rft *Raft) {
 }
 
 func monitorAckChannel(rft *Raft, killCh chan bool) {
-	/*func (rft *Raft) replyAppendRPC(reply bool, currentTerm int, fId int) {
-		if reply {
-			rft.nextIndex[fId-1] = len(rafts[fId].LogArray)
-			rft.matchIndex[fId-1] = len(rafts[fId].LogArray)
-		} else {
-			rft.nextIndex[fId-1]--
+	flag := false
+	for {
+		select {
+		case temp := <-rft.ackCh:
+			rft.Info.Println("Ack received")
+			if temp.reply {
+				rft.nextIndex[temp.fid] = temp.logLength
+				rft.matchIndex[temp.fid] = temp.logLength
+				//update commitindex
+				for n := rft.commitIndex + 1; n < len(rft.LogArray); n++ {
+					maj := 0
+					for _, server := range rft.clusterConfig.Servers {
+						if rft.matchIndex[server.Id] >= n {
+							maj++
+						}
+					}
+					if maj > len(rft.clusterConfig.Servers)/2 && rft.LogArray[n].Term == currentTerm {
+						rft.commitIndex = n
+					}
+				}
+			} else {
+				rft.nextIndex[temp.fid]--
+			}
+		case <-killCh:
+			flag = true
+			break
+		}
+		if flag {
+			break
 		}
 	}
-
-		for {
-			select {
-			case temp := <-rft.:
-				Info.Println("Ack Received:", temp)
-				acks_received += temp
-				if acks_received == required_acks {
-					Info.Println("Majority Achieved", log_entry.(*LogEntryData).Id)
-					rft.LogArray[log_entry.(*LogEntryData).Id].Committed = true
-					//Info.Println(rft.LogArray)
-					rft.commitCh <- log_entry
-
-					temp := new(CommitData)
-					temp.Id = log_entry.(*LogEntryData).Id
-					for _, server := range rft.clusterConfig.Servers[1:] {
-						go doCommitRPCCall(server.Hostname, server.LogPort, temp)
-					}
-
-					majCh <- true
-					err = true
-					break
-				}
-
-			case <-up:
-				Info.Println("Error")
-				err = true
-				break
-			}
-			if err {
-				break
-			}
-		}*/
-		for{
-			select{
-				case temp:=rft.ackCh
-			}
-		}
 }
 
 //entry loop to raft
@@ -452,6 +442,21 @@ func doCastVoteRPC(hostname string, logPort int, temp *VoteRequestReply) {
 	Info.Println("Reply", castVoteCall, reply.X)
 }
 
+func doAppendReplyRPC(hostname string, logPort int, temp *AppendReply) {
+	Info.Println("append reply RPC")
+	//rpc call to the caller
+	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
+	if err != nil {
+		Info.Fatal("Dialing:", err)
+	}
+	reply := new(Reply)
+	args := temp
+	Info.Println("Calling AppendReply RPC", logPort)
+	appendReplyCall := client.Go("AppendEntries.AppendReplyRPC", args, reply, nil) //let go allocate done channel
+	appendReplyCall = <-appendReplyCall.Done
+	Info.Println("Reply", appendReplyCall, reply.X)
+}
+
 func doVoteRequestRPC(hostname string, logPort int, temp *VoteRequest) {
 	Info.Println("Vote request RPC")
 	//rpc call to the caller
@@ -480,16 +485,6 @@ func doAppendRPCCall(hostname string, logPort int, temp *AppendRPC) {
 	appendCall = <-appendCall.Done
 	Info.Println("Reply", appendCall, reply.X)
 }
-
-//receiver is leader
-/*func (rft *Raft) replyAppendRPC(reply bool, currentTerm int, fId int) {
-	if reply {
-		rft.nextIndex[fId-1] = len(rafts[fId].LogArray)
-		rft.matchIndex[fId-1] = len(rafts[fId].LogArray)
-	} else {
-		rft.nextIndex[fId-1]--
-	}
-}*/
 
 func (rft *Raft) updateTermAndVote(term int) {
 	writeFile(CURRENT_TERM, rft.id, term, rft.Info)
@@ -606,7 +601,9 @@ func (rft *Raft) follower() int {
 						}
 					}
 				}
-				rafts[req.leaderId].replyAppendRPC(reply, rft.currentTerm, rft.id)
+
+				temp := &AppendReply{rft.currentTerm, reply, rft.id, len(rft.LogArray)}
+				doAppendReplyRPC(rft.clusterConfig.Servers[req.leaderId].Hostname, rft.clusterConfig.Servers[req.leaderId].LogPort, temp)
 				if reply {
 					rft.persistLog()
 				}
