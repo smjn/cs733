@@ -739,6 +739,7 @@ func (rft *Raft) leader() int {
 				rft.LogArray = append(rft.LogArray, entry)
 				//todo:apply to state machine
 				//todo:respond to client
+				rft.persistLog()
 
 			case *AppendRPC:
 
