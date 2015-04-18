@@ -50,7 +50,7 @@ type Data struct {
 }
 
 //leader check
-var sid int
+var isLeader bool
 
 //get value
 func (d *Data) GetVal() []byte {
@@ -91,7 +91,7 @@ func (kvstr *KeyValueStore) GetDicKVstr() map[string]*Data {
 func write(conn net.Conn, msg string) {
 	buf := []byte(msg)
 	buf = append(buf, []byte(CRLF)...)
-	if sid == 1 {
+	if isLeader {
 		conn.Write(buf)
 	}
 }
@@ -202,7 +202,7 @@ func MonitorCommitChannel(ch chan LogEntry) {
 	for {
 		temp := <-ch
 		var conn net.Conn
-		if sid == 1 {
+		if isLeader {
 			conn = temp.(*LogEntryData).conn
 		} else {
 			conn = nil
@@ -530,9 +530,8 @@ func Debug() {
  *arguments: Logger
  *return: none
  */
-func InitKVStore(log *log.Logger, id int) {
+func InitKVStore(log *log.Logger) {
 	logger = log
-	sid = id
 
 	//initialize key value store
 	table = &KeyValueStore{dictionary: make(map[string]*Data)}
@@ -547,4 +546,8 @@ func ReInitServer() {
 		delete(table.dictionary, key)
 	}
 	//fmt.Println(table.dictionary)
+}
+
+func SetIsLeader(l bool) {
+	isLeader = l
 }

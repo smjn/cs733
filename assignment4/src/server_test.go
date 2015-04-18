@@ -31,6 +31,7 @@ func TestAll(t *testing.T) {
 	//wait for some time so that servers are ready
 
 	time.Sleep(1 * time.Second)
+	testClientAppend()
 	if <-dummy {
 
 	}
@@ -48,4 +49,8 @@ func startServers(i int, t *testing.T, dummy chan bool) {
 	cmd.Stdout = f
 	cmd.Stderr = f
 	cmd.Run()
+}
+
+func testClientAppend() {
+
 }

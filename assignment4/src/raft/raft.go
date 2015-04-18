@@ -257,12 +257,13 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, In
 // Creates a log entry. This implements the LogEntry interface
 // data: data bytes, committed: commit status, conn: connection to client
 // Returns the log entry
-func NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
+func (rft *Raft) NewLogEntry(data []byte, committed bool, conn net.Conn) *LogEntryData {
 	entry := new(LogEntryData)
 	entry.Id = lsn
 	entry.Data = data
 	entry.conn = conn
 	entry.Committed = committed
+	entry.Term = rft.currentTerm
 	lsn++
 	return entry
 }
@@ -290,14 +291,13 @@ func (entry *LogEntryData) SetCommitted(committed bool) {
 //make raft implement the append function
 func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 	rft.Info.Println("Append Called")
-	if rft.id != 1 {
+	if !rft.isLeader {
 		return nil, ErrRedirect(1)
 	}
 	defer rft.Unlock()
 	rft.Lock()
-	temp := NewLogEntry(data, false, conn)
-
-	rft.LogArray = append(rft.LogArray, temp)
+	temp := rft.NewLogEntry(data, false, conn)
+	rft.AddToEventChannel(temp)
 
 	return temp, nil
 }
@@ -357,7 +357,8 @@ func (e ErrRedirect) Error() string {
 }
 
 //entry loop to raft
-func (rft *Raft) loop() {
+func (rft *Raft) Loop() {
+	go rft.MonitorStateMachine()
 	state := FOLLOWER
 	for {
 		switch state {
@@ -428,7 +429,8 @@ func doVoteRequestRPC(hostname string, logPort int, temp *VoteRequest, rft *Raft
 	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
 	defer client.Close()
 	if err != nil {
-		rft.Info.Fatal("Dialing:", err)
+		rft.Info.Println("Dialing:", err, "returning")
+		return
 	}
 	reply := new(VoteRequestReply)
 	args := temp
@@ -443,7 +445,8 @@ func doAppendRPCCall(hostname string, logPort int, temp *AppendRPC, rft *Raft) {
 	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
 	defer client.Close()
 	if err != nil {
-		rft.Info.Fatal("[L]: Dialing:", err)
+		rft.Info.Println("[L]: Dialing:", err, "returning")
+		return
 	}
 	reply := new(AppendReply)
 	args := temp
@@ -463,6 +466,7 @@ func (rft *Raft) updateTermAndVote(term int) {
 func (rft *Raft) follower() int {
 	//start candidate timeout
 	rft.et = time.NewTimer(getRandTime(rft.Info))
+	SetIsLeader(false)
 	for {
 		//wrap in select
 		select {
@@ -576,6 +580,7 @@ func (rft *Raft) follower() int {
 func (rft *Raft) candidate() int {
 	//increment current term
 	rft.Info.Println("[C]: became candidate")
+	SetIsLeader(false)
 	writeFile(CURRENT_TERM, rft.id, rft.currentTerm+1, rft.Info)
 	rft.currentTerm++
 	//vote for self
@@ -665,33 +670,13 @@ func enforceLog(rft *Raft) {
 
 func (rft *Raft) leader() int {
 	rft.Info.Println("[L]: became leader")
+	//update kvstore
+	SetIsLeader(true)
 	heartbeat := time.NewTimer(time.Millisecond * HEARTBEAT_TIMEOUT)
 	heartbeatReq := new(AppendRPC)
 	heartbeatReq.Entries = []*LogEntryData{}
 	heartbeatReq.LeaderId = rft.id
 	rft.currentTerm++
-
-	rft.LogArray = append(
-		rft.LogArray,
-		&LogEntryData{
-			Id:        1,
-			Data:      []byte("hello"),
-			Committed: false,
-			Term:      rft.currentTerm,
-		},
-		&LogEntryData{
-			Id:        2,
-			Data:      []byte("world"),
-			Committed: false,
-			Term:      rft.currentTerm,
-		})
-
-	newEntry := &LogEntryData{
-		Id:        3,
-		Data:      []byte("goodbye"),
-		Committed: false,
-		Term:      rft.currentTerm,
-	}
 
 	//build nextIndex and matchIndex
 	for i := 0; i < len(rft.nextIndex); i++ {
@@ -700,10 +685,6 @@ func (rft *Raft) leader() int {
 	}
 
 	go enforceLog(rft)
-	go func() {
-		time.Sleep(time.Second * 2)
-		rft.LogArray = append(rft.LogArray, newEntry)
-	}()
 
 	for {
 		select {
@@ -724,8 +705,7 @@ func (rft *Raft) leader() int {
 				rft.Info.Println("[L]: got client data")
 				entry := event.(*ClientAppend).logEntry
 				rft.LogArray = append(rft.LogArray, entry)
-				//todo:apply to state machine
-				//todo:respond to client
+				//will now be send to kvstore which'll decode and reply
 				rft.persistLog()
 
 			case *AppendRPC:
@@ -737,6 +717,12 @@ func (rft *Raft) leader() int {
 	}
 }
 
-func StartRaft(rft *Raft) {
-	rft.loop()
+func (rft *Raft) MonitorStateMachine() {
+	for {
+		if rft.commitIndex > rft.lastApplied {
+			rft.lastApplied++
+			rft.commitCh <- rft.LogArray[rft.lastApplied]
+		}
+		time.Sleep(time.Second * 1)
+	}
 }
