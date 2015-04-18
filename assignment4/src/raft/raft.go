@@ -422,25 +422,11 @@ func (rft *Raft) handleAppendReply(temp *AppendReply) {
 	}
 }
 
-func doAppendReplyRPC(hostname string, logPort int, temp *AppendReply, Info *log.Logger) {
-	Info.Println("append reply RPC")
-	//rpc call to the caller
-	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
-	if err != nil {
-		Info.Fatal("Dialing:", err)
-	}
-	reply := new(Reply)
-	args := temp
-	Info.Println("[F]: Calling AppendReply RPC", logPort)
-	appendReplyCall := client.Go("RaftRPCService.AppendReplyRPC", args, reply, nil) //let go allocate done channel
-	appendReplyCall = <-appendReplyCall.Done
-	Info.Println("Reply", appendReplyCall, reply.X)
-}
-
 func doVoteRequestRPC(hostname string, logPort int, temp *VoteRequest, rft *Raft) {
 	rft.Info.Println("[C]:Vote request RPC")
 	//rpc call to the caller
 	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
+	defer client.Close()
 	if err != nil {
 		rft.Info.Fatal("Dialing:", err)
 	}
@@ -455,6 +441,7 @@ func doVoteRequestRPC(hostname string, logPort int, temp *VoteRequest, rft *Raft
 //make append entries rpc call to followers
 func doAppendRPCCall(hostname string, logPort int, temp *AppendRPC, rft *Raft) {
 	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
+	defer client.Close()
 	if err != nil {
 		rft.Info.Fatal("[L]: Dialing:", err)
 	}
