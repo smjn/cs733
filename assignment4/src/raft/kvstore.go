@@ -201,6 +201,7 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 func MonitorCommitChannel(ch chan LogEntry) {
 	for {
 		temp := <-ch
+		logger.Println("got entry to run")
 		var conn net.Conn
 		if isLeader {
 			conn = temp.(*LogEntryData).conn
@@ -359,6 +360,7 @@ func ParseInput(conn net.Conn, cmd *utils.Command) {
  *return: version of inserted key (if successful, 0 otherwise), success or failure, whether to send reply to client
  */
 func performSet(tokens []string, cmd *utils.Command) (uint64, bool, bool) {
+	logger.Println("performSet called")
 	k := tokens[0]
 	//expiry time offset
 	e, _ := strconv.ParseUint(tokens[1], 10, 64)

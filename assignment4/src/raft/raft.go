@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -125,10 +126,11 @@ type Raft struct {
 	voteReplyCh   chan RaftEvent
 	appendReplyCh chan RaftEvent
 	et            *time.Timer
-	isLeader      bool
+	IsLeader      bool
 	lastApplied   int
 	nextIndex     []int
 	matchIndex    []int
+	LeaderId      int
 }
 
 // Log entry interface
@@ -248,9 +250,11 @@ func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry, In
 	rft.appendReplyCh = make(chan RaftEvent)
 	rft.voteReplyCh = make(chan RaftEvent)
 	getSingleDataFromFile(VOTED_FOR, thisServerId, rft.Info) //initialize the votedFor file.
-	rft.isLeader = false
+	rft.IsLeader = false
 	rft.nextIndex = make([]int, len(config.Servers))
 	rft.matchIndex = make([]int, len(config.Servers))
+	rft.commitIndex = -1
+	rft.lastApplied = -1
 	return rft, nil
 }
 
@@ -291,14 +295,11 @@ func (entry *LogEntryData) SetCommitted(committed bool) {
 //make raft implement the append function
 func (rft *Raft) Append(data []byte, conn net.Conn) (LogEntry, error) {
 	rft.Info.Println("Append Called")
-	if !rft.isLeader {
-		return nil, ErrRedirect(1)
+	if !rft.IsLeader {
+		return nil, ErrRedirect(rft.LeaderId)
 	}
-	defer rft.Unlock()
-	rft.Lock()
 	temp := rft.NewLogEntry(data, false, conn)
-	rft.AddToEventChannel(temp)
-
+	rft.AddToEventChannel(&ClientAppend{temp})
 	return temp, nil
 }
 
@@ -310,7 +311,7 @@ func (rft *Raft) AddToChannel(entry LogEntry) {
 
 //AddToEventChannel
 func (rft *Raft) AddToEventChannel(entry RaftEvent) {
-	rft.Info.Println("Adding to event channel", entry)
+	rft.Info.Println("Adding to event channel", entry, reflect.TypeOf(entry))
 	rft.eventCh <- entry
 }
 
@@ -385,9 +386,9 @@ func (rft *Raft) handleMajority(reply *VoteRequestReply) {
 	if reply.Reply {
 		rft.voters++
 		rft.Info.Println("[C]: count", rft.voters)
-		if !rft.isLeader && rft.voters > majority {
+		if !rft.IsLeader && rft.voters > majority {
 			rft.shiftStatusCh <- LEADER
-			rft.isLeader = true
+			rft.IsLeader = true
 		}
 	} else {
 		if rft.currentTerm < reply.CurrentTerm {
@@ -520,6 +521,7 @@ func (rft *Raft) follower() int {
 					temp := &AppendReply{-1, true, -1, -1}
 					rft.Info.Println("[F]: sending dummy reply to " + strconv.Itoa(req.LeaderId))
 					rft.appendReplyCh <- temp
+					rft.LeaderId = req.LeaderId
 					continue
 				}
 
@@ -653,18 +655,19 @@ func enforceLog(rft *Raft) {
 				req.LeaderCommit = rft.commitIndex
 				req.Entries = rft.LogArray[rft.nextIndex[server.Id]:len(rft.LogArray)]
 				req.PrevLogIndex = rft.nextIndex[server.Id] - 1
-				if req.PrevLogIndex <= 0 {
+				if req.PrevLogIndex == -1 {
 					req.PrevLogTerm = LOG_INVALID_TERM
 				} else {
 					req.PrevLogTerm = rft.LogArray[rft.nextIndex[server.Id]-1].Term
 				}
 
 				//appendRPC call
+				rft.Info.Println("[L]: XX append rpc enforce", req)
 				doAppendRPCCall(server.Hostname, server.LogPort, req, rft)
 				rft.Info.Println("[L]: Sent append entries", strconv.Itoa(server.Id))
 			}
-			time.Sleep(time.Millisecond * 2)
 		}
+		time.Sleep(time.Millisecond * 20)
 	}
 }
 
@@ -699,6 +702,7 @@ func (rft *Raft) leader() int {
 			heartbeat.Reset(time.Millisecond * HEARTBEAT_TIMEOUT)
 
 		case event := <-rft.eventCh:
+			rft.Info.Println("[L]: got event", event, reflect.TypeOf(event))
 			switch event.(type) {
 			case *ClientAppend:
 				//write data to log
@@ -718,11 +722,14 @@ func (rft *Raft) leader() int {
 }
 
 func (rft *Raft) MonitorStateMachine() {
+	rft.Info.Println("MonitorStateMachine initialized")
 	for {
+		rft.Info.Println("[L]: C,L", rft.commitIndex, rft.lastApplied)
 		if rft.commitIndex > rft.lastApplied {
 			rft.lastApplied++
+			rft.Info.Println("data put on commit channel")
 			rft.commitCh <- rft.LogArray[rft.lastApplied]
 		}
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second)
 	}
 }

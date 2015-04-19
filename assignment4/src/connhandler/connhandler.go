@@ -128,6 +128,8 @@ func Write(conn net.Conn, msg string) {
 func HandleClient(conn net.Conn, rft *raft.Raft, logger *log.Logger) {
 	defer conn.Close()
 	//channel for every connection for every client
+	rft.Info.Println("new client connection")
+
 	ch := make(chan []byte)
 	go MyRead(ch, conn)
 
@@ -173,7 +175,7 @@ func HandleClient(conn net.Conn, rft *raft.Raft, logger *log.Logger) {
 		}
 
 		if _, err := rft.Append(buffer.Bytes(), conn); err != nil {
-			Write(conn, "ERR_REDIRECT 127.0.0.1 "+strconv.Itoa(raft.CLIENT_PORT+1))
+			Write(conn, "ERR_REDIRECT "+strconv.Itoa(rft.LeaderId))
 			conn.Close()
 			break
 		}
