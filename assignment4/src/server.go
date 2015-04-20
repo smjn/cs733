@@ -216,7 +216,7 @@ func main() {
 	go initInterServerCommunication(server, rft, ch2)
 
 	time.Sleep(100 * time.Millisecond)
-	rft.Loop()
+	go rft.Loop()
 
 	for <-ch1 && <-ch2 {
 
