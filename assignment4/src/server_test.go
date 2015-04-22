@@ -16,7 +16,10 @@ import (
 
 //constant values used
 const (
-	NUM_SERVERS int = 5
+	NUM_SERVERS     int = 5
+	NORM_DELAY          = 15
+	CONC_DELAY          = 30
+	POST_TEST_DELAY     = 5
 )
 
 type Testpair struct {
@@ -45,6 +48,7 @@ func TestAll(t *testing.T) {
 
 	testPerformClientConnect(t)
 	testCommands(t)
+	testConcurrent(t, 10, 10)
 	killServers()
 }
 
@@ -71,6 +75,7 @@ func startServers(i int, t *testing.T) {
 
 //check which server is the leader
 func probeLeader(t *testing.T) (int, error) {
+	logger.Println("Probing leader")
 	if conn, err := net.Dial("tcp", ":"+strconv.Itoa(9000)); err != nil {
 		t.Errorf("Could not connect")
 		return -1, err
@@ -93,6 +98,7 @@ func probeLeader(t *testing.T) (int, error) {
 
 //returns a connection to the leader server
 func getLeaderConn(t *testing.T) net.Conn {
+	logger.Println("Getting connection to leader")
 	if conn, err := net.Dial("tcp", ":"+strconv.Itoa(9000+LeaderId)); err != nil {
 		t.Errorf("Could not connect")
 		return nil
@@ -108,6 +114,7 @@ func initTestLogger() {
 }
 
 func testPerformClientConnect(t *testing.T) {
+	logger.Println("testPerformClientConnect")
 	id, _ := probeLeader(t)
 	if id == -1 {
 		t.Errorf("Could not connect")
@@ -118,6 +125,7 @@ func testPerformClientConnect(t *testing.T) {
 }
 
 func testCommands(t *testing.T) {
+	logger.Println("testCommands")
 	testPerformMultipleSet(t, getPrefix(), 1) //check single set
 	testPerformMultipleSet(t, getPrefix(), 200)
 	testPerformCas(t)
@@ -127,11 +135,12 @@ func testCommands(t *testing.T) {
 	testPerformMultipleDelete(t, 100)
 }
 
-func doTest(conn net.Conn, t *testing.T, test *Testpair) {
+func doTest(conn net.Conn, t *testing.T, test *Testpair, delay int) {
 	conn.Write(test.test)
-	buf := make([]byte, 1024)
-	time.Sleep(time.Millisecond * 20)
+	buf := make([]byte, 256)
+	time.Sleep(time.Millisecond * time.Duration(delay))
 	n, _ := conn.Read(buf)
+	//logger.Println("read", buffer.Bytes())
 
 	if !bytes.Equal(test.expected, buf[:n]) {
 		logger.Println("test:", string(test.test), "got:", string(buf[:n]), "expected:", string(test.expected))
@@ -140,11 +149,12 @@ func doTest(conn net.Conn, t *testing.T, test *Testpair) {
 }
 
 func testPerformMultipleSet(t *testing.T, start int, times int) {
+	logger.Println("testPerformMultipleSet")
 	if conn := getLeaderConn(t); conn != nil {
 		defer conn.Close()
 		for i := start; i < start+times; i++ {
 			test := &Testpair{[]byte("set mykey" + strconv.Itoa(i) + " 0 3\r\nlul\r\n"), []byte("OK 1\r\n")}
-			doTest(conn, t, test)
+			doTest(conn, t, test, NORM_DELAY)
 		}
 	} else {
 		t.Errorf("could not get leader connection")
@@ -152,21 +162,23 @@ func testPerformMultipleSet(t *testing.T, start int, times int) {
 }
 
 func testPerformCas(t *testing.T) {
+	logger.Println("testPerformCas")
 	if conn := getLeaderConn(t); conn != nil {
 		defer conn.Close()
 		test := &Testpair{[]byte("cas mykey1 1000 1 3\r\nlul\r\n"), []byte("OK 2\r\n")}
-		doTest(conn, t, test)
+		doTest(conn, t, test, NORM_DELAY)
 	} else {
 		t.Errorf("could not get leader connection")
 	}
 }
 
 func testPerformMultipleCas(t *testing.T, end int) {
+	logger.Println("testPerformMultipleCas")
 	if conn := getLeaderConn(t); conn != nil {
 		defer conn.Close()
 		for i := 0; i < end; i++ {
 			test := &Testpair{[]byte("cas mykey2 1000 " + strconv.Itoa(i+1) + " 3\r\nlul\r\n"), []byte("OK " + strconv.Itoa(i+2) + "\r\n")}
-			doTest(conn, t, test)
+			doTest(conn, t, test, NORM_DELAY)
 		}
 	} else {
 		t.Errorf("could not get leader connection")
@@ -174,11 +186,12 @@ func testPerformMultipleCas(t *testing.T, end int) {
 }
 
 func testPerformMultipleGet(t *testing.T, end int) {
+	logger.Println("testPerformMultipleGet")
 	if conn := getLeaderConn(t); conn != nil {
 		defer conn.Close()
 		for i := 0; i < end; i++ {
 			test := &Testpair{[]byte("get mykey3\r\n"), []byte("VALUE 3\r\nlul\r\n")}
-			doTest(conn, t, test)
+			doTest(conn, t, test, NORM_DELAY)
 		}
 	} else {
 		t.Errorf("could not get leader connection")
@@ -186,11 +199,12 @@ func testPerformMultipleGet(t *testing.T, end int) {
 }
 
 func testPerformMultipleGetm(t *testing.T, end int) {
+	logger.Println("testPerformMultipleGetm")
 	if conn := getLeaderConn(t); conn != nil {
 		defer conn.Close()
 		for i := 0; i < end; i++ {
 			test := &Testpair{[]byte("getm mykey4\r\n"), []byte("VALUE 1 0 3\r\nlul\r\n")}
-			doTest(conn, t, test)
+			doTest(conn, t, test, NORM_DELAY)
 		}
 	} else {
 		t.Errorf("could not get leader connection")
@@ -198,13 +212,68 @@ func testPerformMultipleGetm(t *testing.T, end int) {
 }
 
 func testPerformMultipleDelete(t *testing.T, end int) {
+	logger.Println("testPerformMultipleDelete")
 	if conn := getLeaderConn(t); conn != nil {
 		defer conn.Close()
 		for i := 0; i < end; i++ {
 			test := &Testpair{[]byte("delete mykey" + strconv.Itoa(i+1) + "\r\n"), []byte("DELETED\r\n")}
-			doTest(conn, t, test)
+			doTest(conn, t, test, NORM_DELAY)
 		}
 	} else {
 		t.Errorf("could not get leader connection")
 	}
+}
+
+func testConcurrent(t *testing.T, clients int, commands int) {
+	logger.Println("testConcurrent")
+	ch := make(chan int)
+	for c := 0; c < clients; c++ {
+		if conn := getLeaderConn(t); conn != nil {
+			defer conn.Close()
+			logger.Println("starting routine")
+			go testCommandsRoutine(conn, t, commands, ch, c+1500)
+		} else {
+			t.Errorf("could not get leader connection")
+		}
+	}
+	num := 0
+	for num < clients {
+		//logger.Println("got", num)
+		num += <-ch
+	}
+}
+
+func testCommandsRoutine(conn net.Conn, t *testing.T, commands int, ch chan int, off int) {
+	logger.Println("testing", commands)
+
+	for i := 0; i < commands; i++ {
+		test := &Testpair{[]byte("set mykey" + strconv.Itoa(off) + " 0 9\r\nsome data\r\n"), []byte("OK " + strconv.Itoa(i+1) + "\r\n")}
+		doTest(conn, t, test, CONC_DELAY)
+		time.Sleep(time.Millisecond * POST_TEST_DELAY)
+	}
+
+	for i := 0; i < commands; i++ {
+		test := &Testpair{[]byte("get mykey" + strconv.Itoa(off) + "\r\n"), []byte("VALUE 9\r\nsome data\r\n")}
+		doTest(conn, t, test, CONC_DELAY)
+		time.Sleep(time.Millisecond * POST_TEST_DELAY)
+	}
+
+	for i := 0; i < commands; i++ {
+		test := &Testpair{[]byte("getm mykey" + strconv.Itoa(off) + "\r\n"), []byte("VALUE " + strconv.Itoa(commands) + " 0 9\r\nsome data\r\n")}
+		doTest(conn, t, test, CONC_DELAY)
+		time.Sleep(time.Millisecond * POST_TEST_DELAY)
+	}
+
+	for i := 0; i < commands; i++ {
+		test := &Testpair{
+			[]byte("cas mykey" + strconv.Itoa(off) + " 1000 " + strconv.Itoa(commands+i) + " 9\r\nsome data\r\n"),
+			[]byte("OK " + strconv.Itoa(commands+i+1) + "\r\n")}
+		doTest(conn, t, test, CONC_DELAY)
+		time.Sleep(time.Millisecond * POST_TEST_DELAY)
+	}
+
+	test := &Testpair{[]byte("delete mykey" + strconv.Itoa(off) + "\r\n"), []byte("DELETED\r\n")}
+	doTest(conn, t, test, CONC_DELAY)
+	time.Sleep(time.Millisecond * POST_TEST_DELAY)
+	ch <- 1
 }

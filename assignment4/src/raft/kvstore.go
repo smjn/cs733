@@ -35,7 +35,7 @@ const (
 	ERR_INTERNAL  = "ERR_INTERNAL"
 
 	//constant
-	MAX_CMD_ARGS = 5
+	MAX_CMD_ARGS = 6
 	MIN_CMD_ARGS = 2
 	READ_TIMEOUT = 5
 )
@@ -58,7 +58,7 @@ func (d *Data) GetVal() []byte {
 }
 
 //get version
-func (d *Data) GetVers() uint64 {
+func (d *Data) GetVer() uint64 {
 	return d.version
 }
 
@@ -80,7 +80,7 @@ func GetKeyValStr() *KeyValueStore {
 }
 
 //access the dictionary
-func (kvstr *KeyValueStore) GetDicKVstr() map[string]*Data {
+func (kvstr *KeyValueStore) GetDictionary() map[string]*Data {
 	return kvstr.dictionary
 }
 
@@ -103,13 +103,18 @@ func write(conn net.Conn, msg string) {
 func isValid(cmd string, tokens []string, conn net.Conn) int {
 	switch cmd {
 	case SET:
-		if len(tokens) != 4 {
+		if len(tokens) > 5 || len(tokens) < 4 {
 			logger.Println(cmd, ":Invalid no. of tokens")
 			write(conn, ERR_CMD_ERR)
 			return 1
 		}
 		if len([]byte(tokens[1])) > 250 {
 			logger.Println(cmd, ":Invalid size of key")
+			write(conn, ERR_CMD_ERR)
+			return 1
+		}
+		if len(tokens) == 5 && tokens[4] != NOREPLY {
+			logger.Println(cmd, ":optional arg incorrect")
 			write(conn, ERR_CMD_ERR)
 			return 1
 		}
@@ -149,13 +154,18 @@ func isValid(cmd string, tokens []string, conn net.Conn) int {
 		}
 
 	case CAS:
-		if len(tokens) != 5 {
+		if len(tokens) > 6 || len(tokens) < 5 {
 			logger.Println(cmd, ":Invalid number of tokens")
 			write(conn, ERR_CMD_ERR)
 			return 1
 		}
 		if len([]byte(tokens[1])) > 250 {
 			logger.Println(cmd, ":Invalid size of key")
+			write(conn, ERR_CMD_ERR)
+			return 1
+		}
+		if len(tokens) == 6 && tokens[5] != NOREPLY {
+			logger.Println(cmd, ":optional arg incorrect")
 			write(conn, ERR_CMD_ERR)
 			return 1
 		}
@@ -368,6 +378,10 @@ func performSet(tokens []string, cmd *utils.Command) (uint64, bool, bool) {
 	n, _ := strconv.ParseUint(tokens[2], 10, 64)
 	r := true
 
+	if len(tokens) == 4 && tokens[3] == NOREPLY {
+		r = false
+	}
+
 	logger.Println(r)
 
 	defer table.Unlock()
@@ -458,6 +472,9 @@ func performCas(tokens []string, cmd *utils.Command) (uint64, int, bool) {
 	n, _ := strconv.ParseUint(tokens[3], 10, 64)
 	r := true
 
+	if len(tokens) == 5 && tokens[4] == NOREPLY {
+		r = false
+	}
 	logger.Println(k, e, ve, n, r)
 
 	defer table.Unlock()

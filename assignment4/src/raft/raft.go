@@ -157,13 +157,13 @@ type CommitData struct {
 }
 
 //persists log to the disk for later retrieval
-func (rft *Raft) persistLog() {
-	if file, err := os.OpenFile(LOG_PERSIST+strconv.Itoa(rft.id), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666); err != nil {
+func (rft *Raft) persistLog(entries []*LogEntryData) {
+	if file, err := os.OpenFile(LOG_PERSIST+strconv.Itoa(rft.id), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666); err != nil {
 		rft.Info.Println("error opening log persist file", err.Error())
 	} else {
 		defer file.Close()
 		enc := json.NewEncoder(file)
-		for _, e := range rft.LogArray {
+		for _, e := range entries {
 			if err := enc.Encode(e); err != nil {
 				rft.Info.Println("error persisting log entry", err.Error())
 			}
@@ -572,7 +572,7 @@ func (rft *Raft) follower() int {
 				temp := &AppendReply{rft.currentTerm, reply, rft.id, len(rft.LogArray)}
 				rft.appendReplyCh <- temp
 				if reply {
-					rft.persistLog()
+					rft.persistLog(req.Entries)
 				}
 				rft.Info.Println("[F]: log is size", len(rft.LogArray))
 			}
@@ -712,7 +712,7 @@ func (rft *Raft) leader() int {
 				entry := event.(*ClientAppend).logEntry
 				rft.LogArray = append(rft.LogArray, entry)
 				//will now be send to kvstore which'll decode and reply
-				rft.persistLog()
+				rft.persistLog([]*LogEntryData{entry})
 
 			case *AppendRPC:
 

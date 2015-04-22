@@ -20,15 +20,8 @@ var Info *log.Logger
 //global raft object for each server instance
 var rft *raft.Raft
 
-//Receiver for RPC
+//Receiver for all raft related RPCs
 type RaftRPCService struct{}
-
-//Receiver for voting related RPC
-//type Voting struct{}
-
-//receiver for testing RPC
-//only for testing purpose
-type Tester struct{}
 
 //RPC argument for testing the replication of keys value version across key value stores
 type TestArgs struct {
@@ -39,23 +32,23 @@ type TestArgs struct {
 
 // RPC argument with boolean value in the reply to confirm that indeed the replication went through across servers
 type TestReply struct {
-	replica_updated bool
+	isUpdated bool
 }
 
 //only for testing purpose
-//this function checks for the key value in its kvstore and sets reply.replica_updated true if present and false if absent
+//this function checks for the key value in its kvstore and sets reply.isUpdated true if present and false if absent
 //arguments: args contains the key, value, version to be matched
 //reply is the reply to be sent
-func (t *Tester) testerRPC(args *TestArgs, reply *TestReply) error {
+func (t *RaftRPCService) testerRPC(args *TestArgs, reply *TestReply) error {
 	table := raft.GetKeyValStr()
 	table.RLock()
 	defer table.RUnlock()
-	dic := table.GetDicKVstr()
+	dic := table.GetDictionary()
 	if v, ok := dic[args.key]; ok {
-		the_val := v.GetVal()
-		the_vers := v.GetVers()
-		if bytes.Equal(the_val, args.value) && the_vers == args.version {
-			reply.replica_updated = true
+		val := v.GetVal()
+		ver := v.GetVer()
+		if bytes.Equal(val, args.value) && ver == args.version {
+			reply.isUpdated = true
 			return nil
 		} else {
 			return nil
@@ -69,10 +62,10 @@ type Reply struct {
 	X int
 }
 
-//RPC for follower server. To let followers know that they can append their logs
-//arguments: pointer to argument struct (has LogEntryData), pointer to reply struct
+//RPC called by leader server. To let followers know that they can append their logs
+//arguments: pointer to argument struct (has AppendRPC), pointer to reply struct AppendReply
 //returns: error
-//receiver: pointer to AppendEntries
+//receiver: pointer to RaftRPCService
 func (t *RaftRPCService) AppendRPC(args *raft.AppendRPC, reply *raft.AppendReply) error {
 	Info.Println("append RPC invoked")
 	rft.AddToEventChannel(args)
@@ -84,21 +77,10 @@ func (t *RaftRPCService) AppendRPC(args *raft.AppendRPC, reply *raft.AppendReply
 	return nil
 }
 
-//func (t *RaftRPCService) AppendReplyRPC(args *raft.AppendReply, reply *Reply) error {
-//	Info.Println("append reply to leader RPC invoked")
-//	rft.AddToEventChannel(args)
-//	reply.X = 1
-//	return nil
-//	/*Info.Println("Append Entries RPC invoked", (*args).GetLsn(), (*args).GetData(), (*args).GetCommitted())
-//	rft.LogArray = append(rft.LogArray, raft.NewLogEntry((*args).GetData(), (*args).GetCommitted(), nil))
-//	reply.X = 1
-//	return nil*/
-//}
-
 //RPC for follower server. To let followers know that and entry can be committed.
 //arguments: pointer to argument struct (has LogEntry), pointer to reply struct
 //returns: error
-//receiver: pointer to AppendEntries
+//receiver: pointer to RaftRPCService
 func (t *RaftRPCService) CommitRPC(args *raft.CommitData, reply *Reply) error {
 	Info.Println("Commit RPC invoked")
 	rft.LogArray[(*args).Id].SetCommitted(true)
@@ -107,6 +89,10 @@ func (t *RaftRPCService) CommitRPC(args *raft.CommitData, reply *Reply) error {
 	return nil
 }
 
+//RPC called by candidate server. To ask the follower for votes.
+//arguments: pointer to argument struct (has VoteRequest), pointer to reply struct VoteRequestReply
+//returns: error
+//receiver: pointer to RaftRPCService
 func (t *RaftRPCService) VoteRequestRPC(args *raft.VoteRequest, reply *raft.VoteRequestReply) error {
 	Info.Println("Request Vote RPC received")
 	rft.AddToEventChannel(args)
@@ -115,13 +101,6 @@ func (t *RaftRPCService) VoteRequestRPC(args *raft.VoteRequest, reply *raft.Vote
 	reply.Reply = temp.Reply
 	return nil
 }
-
-//func (t *RaftRPCService) CastVoteRPC(args *raft.VoteRequestReply, reply *Reply) error {
-//	Info.Println("Cast Vote RPC received")
-//	rft.AddToMonitorVotesChannel(args)
-//	reply.X = 1
-//	return nil
-//}
 
 //Initialize all the things necessary for start the server for inter raft communication.
 //The servers are running on ports 20000+serverId. {0..4}
