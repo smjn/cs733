@@ -49,6 +49,7 @@ func TestAll(t *testing.T) {
 	testPerformClientConnect(t)
 	testCommands(t)
 	testConcurrent(t, 10, 10)
+	testLeaderChange(t)
 	killServers()
 }
 
@@ -76,29 +77,32 @@ func startServers(i int, t *testing.T) {
 //check which server is the leader
 func probeLeader(t *testing.T) (int, error) {
 	logger.Println("Probing leader")
-	if conn, err := net.Dial("tcp", ":"+strconv.Itoa(9000)); err != nil {
-		t.Errorf("Could not connect")
-		return -1, err
-	} else {
-		sending := []byte("set probe 100 3\r\nlul\r\n")
-		conn.Write(sending)
-		buffer := make([]byte, 1024)
-		conn.Read(buffer)
-		n := bytes.Index(buffer, []byte{0})
-		str := string(buffer[:n])
-		if strings.Contains(str, "ERR_REDIRECT") {
-			str = strings.TrimSpace(str)
-			id, _ := strconv.Atoi(strings.Fields(str)[1])
-			LeaderId = id
-			return id, nil
+	for i := 0; i < NUM_SERVERS; i++ {
+		if conn, err := net.Dial("tcp", ":"+strconv.Itoa(9000+i)); err != nil {
+			logger.Println("could not connect to", strconv.Itoa(9000+i))
+			continue
+		} else {
+			sending := []byte("set probe 100 3\r\nlul\r\n")
+			conn.Write(sending)
+			buffer := make([]byte, 1024)
+			conn.Read(buffer)
+			n := bytes.Index(buffer, []byte{0})
+			str := string(buffer[:n])
+			if strings.Contains(str, "ERR_REDIRECT") {
+				str = strings.TrimSpace(str)
+				id, _ := strconv.Atoi(strings.Fields(str)[1])
+				LeaderId = id
+				return id, nil
+			}
+			return 0, nil
 		}
-		return 0, nil
 	}
+	return -1, nil
 }
 
 //returns a connection to the leader server
 func getLeaderConn(t *testing.T) net.Conn {
-	logger.Println("Getting connection to leader")
+	logger.Println("Getting connection to leader", 9000+LeaderId)
 	if conn, err := net.Dial("tcp", ":"+strconv.Itoa(9000+LeaderId)); err != nil {
 		t.Errorf("Could not connect")
 		return nil
@@ -113,6 +117,7 @@ func initTestLogger() {
 	logger = log.New(f, "INFO: ", log.Ldate|log.Lmicroseconds|log.Lshortfile)
 }
 
+//test a connection to a leader and also probe for the leader.
 func testPerformClientConnect(t *testing.T) {
 	logger.Println("testPerformClientConnect")
 	id, _ := probeLeader(t)
@@ -124,6 +129,7 @@ func testPerformClientConnect(t *testing.T) {
 	logger.Println("Leader Id:", id)
 }
 
+//wrapper function to call functions for all kvstore commands
 func testCommands(t *testing.T) {
 	logger.Println("testCommands")
 	testPerformMultipleSet(t, getPrefix(), 1) //check single set
@@ -135,12 +141,15 @@ func testCommands(t *testing.T) {
 	testPerformMultipleDelete(t, 100)
 }
 
+//generic function that takes as input a test case sends data to server, receives reply
+//and checks whether the result is same expected value.
 func doTest(conn net.Conn, t *testing.T, test *Testpair, delay int) {
 	conn.Write(test.test)
+	//logger.Println("wrote", test.test)
 	buf := make([]byte, 256)
 	time.Sleep(time.Millisecond * time.Duration(delay))
 	n, _ := conn.Read(buf)
-	//logger.Println("read", buffer.Bytes())
+	//logger.Println("read", string(buf[:n]))
 
 	if !bytes.Equal(test.expected, buf[:n]) {
 		logger.Println("test:", string(test.test), "got:", string(buf[:n]), "expected:", string(test.expected))
@@ -148,6 +157,7 @@ func doTest(conn net.Conn, t *testing.T, test *Testpair, delay int) {
 	}
 }
 
+//perform set operation on multiple keys
 func testPerformMultipleSet(t *testing.T, start int, times int) {
 	logger.Println("testPerformMultipleSet")
 	if conn := getLeaderConn(t); conn != nil {
@@ -161,6 +171,7 @@ func testPerformMultipleSet(t *testing.T, start int, times int) {
 	}
 }
 
+//perform cas operation on single key
 func testPerformCas(t *testing.T) {
 	logger.Println("testPerformCas")
 	if conn := getLeaderConn(t); conn != nil {
@@ -172,6 +183,7 @@ func testPerformCas(t *testing.T) {
 	}
 }
 
+//perform cas operation on multiple keys
 func testPerformMultipleCas(t *testing.T, end int) {
 	logger.Println("testPerformMultipleCas")
 	if conn := getLeaderConn(t); conn != nil {
@@ -185,6 +197,7 @@ func testPerformMultipleCas(t *testing.T, end int) {
 	}
 }
 
+//queries the data for multiple keys.
 func testPerformMultipleGet(t *testing.T, end int) {
 	logger.Println("testPerformMultipleGet")
 	if conn := getLeaderConn(t); conn != nil {
@@ -198,6 +211,7 @@ func testPerformMultipleGet(t *testing.T, end int) {
 	}
 }
 
+//queries the meta data for multiple keys.
 func testPerformMultipleGetm(t *testing.T, end int) {
 	logger.Println("testPerformMultipleGetm")
 	if conn := getLeaderConn(t); conn != nil {
@@ -211,6 +225,7 @@ func testPerformMultipleGetm(t *testing.T, end int) {
 	}
 }
 
+//performs deletion of multiple keys
 func testPerformMultipleDelete(t *testing.T, end int) {
 	logger.Println("testPerformMultipleDelete")
 	if conn := getLeaderConn(t); conn != nil {
@@ -224,6 +239,8 @@ func testPerformMultipleDelete(t *testing.T, end int) {
 	}
 }
 
+//create multiple connections to the leader and calls go routines on those connections
+//to run commands on the server.
 func testConcurrent(t *testing.T, clients int, commands int) {
 	logger.Println("testConcurrent")
 	ch := make(chan int)
@@ -238,11 +255,12 @@ func testConcurrent(t *testing.T, clients int, commands int) {
 	}
 	num := 0
 	for num < clients {
-		//logger.Println("got", num)
 		num += <-ch
 	}
 }
 
+//for each connection to the leader, all KV commands will be run
+//the number of times each commmand is run is passed as an argument.
 func testCommandsRoutine(conn net.Conn, t *testing.T, commands int, ch chan int, off int) {
 	logger.Println("testing", commands)
 
@@ -276,4 +294,23 @@ func testCommandsRoutine(conn net.Conn, t *testing.T, commands int, ch chan int,
 	doTest(conn, t, test, CONC_DELAY)
 	time.Sleep(time.Millisecond * POST_TEST_DELAY)
 	ch <- 1
+}
+
+//this test kills the current leader and waits for some time to let
+//a new leader be electe. Then it probes for the new leader. If the new
+//leader is still same as before, then the test fails. Otherwise a simple get
+//operation is performed to check if clients can still connect.
+func testLeaderChange(t *testing.T) {
+	logger.Println("killing the leader")
+	temp := LeaderId
+	cmd := exec.Command("sh", "-c", "kill -9 $(netstat -ntlp|grep server|grep "+strconv.Itoa(20000+LeaderId)+"|awk '{print $7}'|cut -d/ -f1)")
+	cmd.Run()
+	//give time to change leader
+	time.Sleep(time.Second * 5)
+	probeLeader(t)
+	if LeaderId == temp {
+		t.Errorf("Leader did not change")
+	} else {
+		logger.Println("Leader changed to", LeaderId)
+	}
 }

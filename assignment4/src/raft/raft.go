@@ -428,36 +428,41 @@ func (rft *Raft) handleAppendReply(temp *AppendReply) {
 }
 
 func doVoteRequestRPC(hostname string, logPort int, temp *VoteRequest, rft *Raft) {
-	rft.Info.Println("[C]:Vote request RPC")
+	rft.Info.Println("[C]:Vote request RPC", logPort)
 	//rpc call to the caller
 	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
-	defer client.Close()
 	if err != nil {
 		rft.Info.Println("Dialing:", err, "returning")
-		return
+		//time.Sleep(time.Millisecond * 5)
+		//return
+	} else {
+		defer client.Close()
+		reply := new(VoteRequestReply)
+		args := temp
+		rft.Info.Println("Calling vote request RPC", logPort)
+		voteReqCall := client.Go("RaftRPCService.VoteRequestRPC", args, reply, nil) //let go allocate done channel
+		voteReqCall = <-voteReqCall.Done
+		rft.handleMajority(reply)
 	}
-	reply := new(VoteRequestReply)
-	args := temp
-	rft.Info.Println("Calling vote request RPC", logPort)
-	voteReqCall := client.Go("RaftRPCService.VoteRequestRPC", args, reply, nil) //let go allocate done channel
-	voteReqCall = <-voteReqCall.Done
-	rft.handleMajority(reply)
 }
 
 //make append entries rpc call to followers
-func doAppendRPCCall(hostname string, logPort int, temp *AppendRPC, rft *Raft) {
+func doAppendRPCCall(hostname string, logPort int, temp *AppendRPC, rft *Raft, whichAppend string) {
+	rft.Info.Println("Making", whichAppend)
 	client, err := rpc.Dial("tcp", hostname+":"+strconv.Itoa(logPort))
-	defer client.Close()
 	if err != nil {
 		rft.Info.Println("[L]: Dialing:", err, "returning")
-		return
+		//time.Sleep(time.Millisecond * 5)
+		//return
+	} else {
+		defer client.Close()
+		reply := new(AppendReply)
+		args := temp
+		rft.Info.Println("[L]: RPC Called", logPort)
+		appendCall := client.Go("RaftRPCService.AppendRPC", args, reply, nil) //let go allocate done channel
+		appendCall = <-appendCall.Done
+		rft.handleAppendReply(reply)
 	}
-	reply := new(AppendReply)
-	args := temp
-	rft.Info.Println("[L]: RPC Called", logPort)
-	appendCall := client.Go("RaftRPCService.AppendRPC", args, reply, nil) //let go allocate done channel
-	appendCall = <-appendCall.Done
-	rft.handleAppendReply(reply)
 }
 
 //set currentterm to latest value and reinitialize votedfor
@@ -468,6 +473,9 @@ func (rft *Raft) updateTermAndVote(term int) {
 	writeFile(VOTED_FOR, rft.id, NULL_VOTE, rft.Info)
 }
 
+//follower function keeps running until the election timeout runs out. Then a shift to
+//candidate will be made. The leader will keep sending heartbeats in much smaller intervals
+//than election timeout to make sure followers do not switch.
 func (rft *Raft) follower() int {
 	//start candidate timeout
 	rft.et = time.NewTimer(time.Millisecond * time.Duration(getRandTime(rft.Info)))
@@ -519,7 +527,8 @@ func (rft *Raft) follower() int {
 				rft.et.Reset(time.Millisecond * time.Duration(getRandTime(rft.Info)))
 				rft.Info.Println("[F]:", "Timer reset on AppendRPC")
 				req := event.(*AppendRPC)
-				if len(req.Entries) == 0 { //heartbeat
+				//heartbeat
+				if len(req.Entries) == 0 {
 					rft.Info.Println("[F]: got hearbeat from " + strconv.Itoa(req.LeaderId))
 					temp := &AppendReply{-1, true, -1, -1}
 					rft.Info.Println("[F]: sending dummy reply to " + strconv.Itoa(req.LeaderId))
@@ -658,9 +667,7 @@ func enforceLog(rft *Raft) {
 				}
 
 				//appendRPC call
-				//rft.Info.Println("[L]: XX append rpc enforce", req)
-				doAppendRPCCall(server.Hostname, server.LogPort, req, rft)
-				//rft.Info.Println("[L]: Sent append entries", strconv.Itoa(server.Id))
+				doAppendRPCCall(server.Hostname, server.LogPort, req, rft, "log enforce")
 			}
 		}
 		time.Sleep(time.Millisecond)
@@ -672,8 +679,7 @@ func sendHeartbeats(rft *Raft, heartbeatReq *AppendRPC) {
 	for _, server := range rft.clusterConfig.Servers {
 		if server.Id != rft.id {
 			//doRPCCall for hearbeat
-			go doAppendRPCCall(server.Hostname, server.LogPort, heartbeatReq, rft)
-			//rft.Info.Println("[L]: Sent heartbeat", strconv.Itoa(server.Id))
+			go doAppendRPCCall(server.Hostname, server.LogPort, heartbeatReq, rft, "heartbeat")
 		}
 	}
 }

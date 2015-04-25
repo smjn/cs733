@@ -77,18 +77,6 @@ func (t *RaftRPCService) AppendRPC(args *raft.AppendRPC, reply *raft.AppendReply
 	return nil
 }
 
-//RPC for follower server. To let followers know that and entry can be committed.
-//arguments: pointer to argument struct (has LogEntry), pointer to reply struct
-//returns: error
-//receiver: pointer to RaftRPCService
-func (t *RaftRPCService) CommitRPC(args *raft.CommitData, reply *Reply) error {
-	Info.Println("Commit RPC invoked")
-	rft.LogArray[(*args).Id].SetCommitted(true)
-	rft.AddToChannel(rft.LogArray[(*args).Id])
-	reply.X = 1
-	return nil
-}
-
 //RPC called by candidate server. To ask the follower for votes.
 //arguments: pointer to argument struct (has VoteRequest), pointer to reply struct VoteRequestReply
 //returns: error
