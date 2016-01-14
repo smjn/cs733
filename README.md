@@ -1,5 +1,5 @@
 Author:Sushant Mahajan
-# Memcahche Clone
+# Memcache Clone
 
 Discussed with:
 * Harshit Pande			133050040
